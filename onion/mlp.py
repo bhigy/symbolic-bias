@@ -1,10 +1,9 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class MLP(nn.Module):
-    def __init__(self, sizes, activation=F.tanh):
+    def __init__(self, sizes, activation=torch.tanh):
         super(MLP, self).__init__()
         self.activation = activation
         self.layers = nn.ModuleList()
@@ -12,7 +11,7 @@ class MLP(nn.Module):
 
         for size_in, size_out in zip(sizes[:-1], sizes[1:]):
             self.layers.append(nn.Linear(size_in, size_out))
-    
+
     def forward(self, X):
         for i in range(0, len(self.layers)-1):
             X = self.activation(self.layers[i](X))

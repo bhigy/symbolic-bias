@@ -5,7 +5,7 @@ import sys
 import gzip
 import csv
 import scipy
-import scipy.io 
+import scipy.io
 import logging
 
 class Provider:
@@ -33,7 +33,7 @@ class Provider:
             image['feat'] = self.img_feat[image['imgid']]
             for (i, sentence) in enumerate(image['sentences']):
                 uttid = cap2wav["{}#{}".format(image['filename'], i)]
-                
+
                 if uttid not in self.audio:
                     logging.warning("No MFCC features, using dummy zeros for {}".format(uttid))
                     sentence['audio'] = np.zeros((10, 13))
@@ -41,8 +41,8 @@ class Provider:
                     sentence['audio'] = self.audio[uttid] if self.truncate is None else self.audio[uttid][:self.truncate,:]
                 sentence['speaker'] = "flickr8k_" + W2S[uttid]
                 self.speakers.add(sentence['speaker'])
-    
-     
+
+
   def _iterImages(self, split):
         for image in self.dataset['images']:
             if image['split'] == split:
@@ -52,14 +52,14 @@ class Provider:
         for image in self._iterImages(split):
             for sent in image['sentences']:
                 yield sent
-   
+
   def iterImages(self, split='train', shuffle=False):
         if not shuffle:
             return self._iterImages(split)
         else:
             return sorted(self._iterImages(split), key=lambda _: np.random.random())
 
-  def iterSentences(self, split='train', shuffle=False):       
+  def iterSentences(self, split='train', shuffle=False):
         if not shuffle:
             return self._iterSentences(split)
         else:

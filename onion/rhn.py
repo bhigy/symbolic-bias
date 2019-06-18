@@ -83,7 +83,7 @@ class RHN(nn.Module):
         return noise
 
     def step(self, i_for_H_t, i_for_T_t, h_tm1, noise_s):
-        tanh, sigm = F.tanh, F.sigmoid
+        tanh, sigm = torch.tanh, F.sigmoid
         noise_s_for_H = noise_s if self.tied_noise else noise_s[0]
         noise_s_for_T = noise_s if self.tied_noise else noise_s[1]
 

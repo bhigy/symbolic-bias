@@ -5,7 +5,7 @@ import torch
 
 class SelfAttention(nn.Module):
     """Parameterized weighted average of a sequence of states."""
-    def __init__(self, size_in, size, activation=F.tanh):
+    def __init__(self, size_in, size, activation=torch.tanh):
         super(SelfAttention, self).__init__()
         util.autoassign(locals())
         self.Regress1 = util.make_linear(self.size_in, self.size)

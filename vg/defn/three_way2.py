@@ -15,7 +15,7 @@ from vg.defn.encoders import TextEncoderTop, TextEncoderBottom, SpeechEncoderBot
 from collections import Counter
 import sys
 import itertools
-import json 
+import json
 
 def step(task, *args):
 
@@ -33,15 +33,15 @@ class SpeechText(nn.Module):
         self.SpeechEncoderBottom = speech_encoder
         self.TextEncoderBottom = text_encoder
         self.SpeechEncoderTop = SpeechEncoderTop(**config['SpeechEncoderTop'])
-        self.TextEncoderTop = TextEncoderTop(**config['TextEncoderTop'])  
+        self.TextEncoderTop = TextEncoderTop(**config['TextEncoderTop'])
         self.optimizer = optim.Adam(self.parameters(), lr=config['lr'])
 
     def cost(self, speech, text):
         speech_enc = self.SpeechEncoderTop(self.SpeechEncoderBottom(speech))
         text_enc = self.TextEncoderTop(self.TextEncoderBottom(text))
-        scores = loss.cosine_matrix(speech_enc, text_enc) 
+        scores = loss.cosine_matrix(speech_enc, text_enc)
         cost =  loss.contrastive(scores, margin=self.config['margin_size'])
-        return cost            
+        return cost
 
     def args(self, item):
         return (item['audio'], item['input'].astype('int64'))
@@ -63,9 +63,9 @@ class SpeechImage(nn.Module):
     def cost(self, speech, image):
         speech_enc = self.SpeechEncoderTop(self.SpeechEncoderBottom(speech))
         image_enc = self.ImageEncoder(image)
-        scores = loss.cosine_matrix(speech_enc, image_enc) 
+        scores = loss.cosine_matrix(speech_enc, image_enc)
         cost =  loss.contrastive(scores, margin=self.config['margin_size'])
-        return cost     
+        return cost
 
     def args(self, item):
         return (item['audio'], item['target_v'])
@@ -87,9 +87,9 @@ class TextImage(nn.Module):
     def cost(self, text, image):
         text_enc = self.TextEncoderTop(self.TextEncoderBottom(text))
         image_enc = self.ImageEncoder(image)
-        scores = loss.cosine_matrix(text_enc, image_enc) 
+        scores = loss.cosine_matrix(text_enc, image_enc)
         cost =  loss.contrastive(scores, margin=self.config['margin_size'])
-        return cost     
+        return cost
 
     def args(self, item):
         return (item['input'].astype('int64'), item['target_v'])
@@ -120,7 +120,7 @@ class Net(nn.Module):
         self.SpeechImage = SpeechImage(self.SpeechEncoderBottom, config['SpeechImage'])
         self.TextImage   = TextImage(self.TextEncoderBottom, config['TextImage']) \
                                 if config.get('TextImage')  else None
-  
+
     def encode_images(self, images):
         with testing(self):
             rep = self.SpeechImage.ImageEncoder(images)
@@ -156,7 +156,7 @@ def valid_loss(net, name, task, data):
         return result
 
 def experiment(net, data, run_config):
-    
+
     net.cuda()
     net.train()
     scorer = run_config['Scorer']
@@ -168,17 +168,17 @@ def experiment(net, data, run_config):
     with open("result.json", "w") as out:
       for epoch in range(last_epoch+1, run_config['epochs'] + 1):
         costs = dict(SpeechText=Counter(), SpeechImage=Counter(), TextImage=Counter())
-        
-        for _j, items in enumerate(zip(data['SpeechImage'].iter_train_batches(reshuffle=True), 
+
+        for _j, items in enumerate(zip(data['SpeechImage'].iter_train_batches(reshuffle=True),
                                        data['SpeechText'].iter_train_batches(reshuffle=True),
                                        data['TextImage'].iter_train_batches(reshuffle=True))):
-            j = _j + 1  
+            j = _j + 1
             item = dict(SpeechImage=items[0], SpeechText=items[1], TextImage=items[2])
             for name, task in run_config['tasks']:
                 spk = item[name]['speaker'][0] if len(set(item[name]['speaker'])) == 1 else 'MIXED'
                 args = task.args(item[name])
                 args = [torch.autograd.Variable(torch.from_numpy(x)).cuda() for x in args ]
-              
+
                 loss = task.cost(*args)
 
                 task.optimizer.zero_grad()
@@ -197,9 +197,9 @@ def experiment(net, data, run_config):
         torch.save(net, "model.{}.pkl".format(epoch))
 
         with testing(net):
-            result = dict(epoch=epoch, 
-                          rsa=scorer.rsa_image(net), 
-                          retrieval=scorer.retrieval(net), 
+            result = dict(epoch=epoch,
+                          rsa=scorer.rsa_image(net),
+                          retrieval=scorer.retrieval(net),
                           speaker_id=scorer.speaker_id(net))
             out.write(json.dumps(result))
             out.write("\n")

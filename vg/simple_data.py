@@ -61,7 +61,7 @@ def vector_padder(vecs):
         max_len = max(map(len, vecs))
         #for vec in vecs:
         #    assert len(vec.shape) == 2, "Broken vector {}".format(vec)
-                
+
         return numpy.array([ numpy.vstack([numpy.zeros((max_len-len(vec), vec.shape[1])) , vec])
                             for vec in vecs ], dtype='float32')
 
@@ -77,7 +77,7 @@ class Batcher(object):
         except:
             self.gap_low = self.erasure
             self.gap_high = self.erasure + 1
-        
+
     def pad(self, xss): # PAD AT BEGINNING
         max_len = max((len(xs) for xs in xss))
         def pad_one(xs):
@@ -110,7 +110,7 @@ class Batcher(object):
         target_prev_t = mb_target_t[:,0:-1]
         target_v = numpy.array([ x['img'] for x in gr ], dtype='float32')
         gap = numpy.random.randint(self.gap_low, self.gap_high, 1)[0]
-       
+
         L_aud =  [len(x['audio']) for x in gr ]
         audio = vector_padder([ x['audio'] for x in gr ]) if gr[0]['audio']  is not None else None
         if self.midpoint:
@@ -130,7 +130,7 @@ class Batcher(object):
         else:
             inp_beg = inp[:, :mid - gap]
             inp_end = inp[:, mid + gap:]
-        
+
         if self.sigma is not None and not self.noise_tied:
             if numpy.random.binomial(1, 0.5) == 1:
                 audio_beg += numpy.random.normal(loc=0.0, scale=self.sigma, size=audio_beg.shape)
@@ -147,13 +147,13 @@ class Batcher(object):
         two3 = one3 * 2
         audio_1      = audio[:, 1:one3,     :]
         audio_1_prev = audio[:, 0:one3-1,   :]
-        audio_2      = audio[:, one3:two3,  :] 
+        audio_2      = audio[:, one3:two3,  :]
         audio_3      = audio[:, two3+1:,    :]
         audio_3_prev = audio[:, two3:-1,    :]
 
         assert audio_1.shape == audio_1_prev.shape
         assert audio_3.shape == audio_3_prev.shape
-      
+
         return { 'input': inp,
                  'input_beg': inp_beg,
                  'input_end': inp_end,
@@ -164,7 +164,7 @@ class Batcher(object):
                  'audio_beg': audio_beg,
                  'audio_end': audio_end,
                  'audio_1': audio_1,
-				 'audio_1_prev': audio_1_prev,
+                 'audio_1_prev': audio_1_prev,
                  'audio_2': audio_2,
                  'audio_3_prev': audio_3_prev,
                  'audio_3': audio_3,
@@ -172,8 +172,10 @@ class Batcher(object):
                  'speaker_id': numpy.array([ x['speaker_id'] for x in gr ])
                 }
 
+
 def midpoint(L_tot, L_pad):
     return (L_tot - L_pad) // 2 + L_pad
+
 
 def scale_utterance(data):
     def scale(datum):
@@ -182,6 +184,7 @@ def scale_utterance(data):
         sigma = datum.std(axis=1, keepdims=True)
         return (datum - mu)/sigma
     return [ scale(datum) for datum in data ]
+
 
 class SimpleData(object):
     """Training / validation data prepared to feed to the model."""
@@ -214,7 +217,7 @@ class SimpleData(object):
             parts['audio'] = self.audio_scaler.fit_transform(parts['audio'])
         elif scale_utt:
             parts['audio'] = scale_utterance(parts['audio'])
-            
+
         self.data['train'] = outsidein(parts)
 
         # VALIDATION
@@ -223,7 +226,7 @@ class SimpleData(object):
         if self.visual:
             parts_val['img'] = self.scaler.transform(parts_val['img'])
         if scale_input:
-            
+
             parts_val['audio'] = self.audio_scaler.transform(parts_val['audio'])
         elif scale_utt:
             parts_val['audio'] = scale_utterance(parts_val['audio'])
@@ -249,7 +252,7 @@ class SimpleData(object):
         if self.by_speaker:
             for x in randomized(by_speaker(self.batcher, data)):
                 yield x
-        else:                    
+        else:
             if reshuffle:
                 data = randomized(self.data['train'])
             for bunch in util.grouper(data, self.batch_size*20):

@@ -37,10 +37,10 @@ def main():
     p.add_argument('--batch_size', default=32, type=int)
     p.add_argument('--output', default='result.json')
     args = parser.parse_args()
-    args.func(args)  
+    args.func(args)
 
 def score(args):
-    
+
     if args.dataset == 'coco':
         import vg.vendrov_provider as dp
     elif args.dataset == 'places':
@@ -87,7 +87,6 @@ def stringsim(a, b):
     return 1 - L.distance(a, b) / max(len(a), len(b))
 
 class Scorer:
-
     def __init__(self, prov, config, net=None): #FIXME this should just take a encoder function, not net
         self.prov = prov
         self.config = config
@@ -125,7 +124,7 @@ class Scorer:
         if net is None:
             pred = self.pred
             net = self.net
-        else: 
+        else:
             with testing(net):
                 pred = self.encode_sentences(net, self.sentence_data, batch_size=self.config['batch_size'])
         X = pred
@@ -153,84 +152,84 @@ class Scorer:
         return dict(maj=maj, rep=max(scores['rep']), mfcc=max(scores['mfcc']))
 
     def rsa_image(self, net=None, within=False):
-            # Full RSA
-            if net is None:
-                pred = self.pred
-            else:
-                with testing(net):
-                   pred = self.encode_sentences(net, self.sentence_data, batch_size=self.config['batch_size'])
-            if hasattr(net, 'mapper') and net.mapper is not None:
-                # FIXME do something reasonable here
-                #print("This is a text net")
-                mfcc = numpy.array([ numpy.zeros((1)) for audio in self.sentence_data])
-            else:
-                #print("This is an audio net")
-                mfcc = numpy.array([ audio.mean(axis=0) for audio in self.sentence_data])
-            sim_mfcc = cosine_similarity(mfcc)
-            sim_pred = cosine_similarity(pred)
-            
-            img_rep = scipy.stats.pearsonr(triu(self.sim_images), triu(sim_pred))[0]
-            img_mfcc = scipy.stats.pearsonr(triu(self.sim_images), triu(sim_mfcc))[0]
-            rep_mfcc = scipy.stats.pearsonr(triu(sim_pred), triu(sim_mfcc))[0]
-            result = dict(img_rep=float(img_rep), img_mfcc=float(img_mfcc), rep_mfcc=float(rep_mfcc)) # make json happy
-            if within:
-                result['within'] = within_rsa
-            return result
+        # Full RSA
+        if net is None:
+            pred = self.pred
+        else:
+            with testing(net):
+               pred = self.encode_sentences(net, self.sentence_data, batch_size=self.config['batch_size'])
+        if hasattr(net, 'mapper') and net.mapper is not None:
+            # FIXME do something reasonable here
+            #print("This is a text net")
+            mfcc = numpy.array([ numpy.zeros((1)) for audio in self.sentence_data])
+        else:
+            #print("This is an audio net")
+            mfcc = numpy.array([ audio.mean(axis=0) for audio in self.sentence_data])
+        sim_mfcc = cosine_similarity(mfcc)
+        sim_pred = cosine_similarity(pred)
+
+        img_rep = scipy.stats.pearsonr(triu(self.sim_images), triu(sim_pred))[0]
+        img_mfcc = scipy.stats.pearsonr(triu(self.sim_images), triu(sim_mfcc))[0]
+        rep_mfcc = scipy.stats.pearsonr(triu(sim_pred), triu(sim_mfcc))[0]
+        result = dict(img_rep=float(img_rep), img_mfcc=float(img_mfcc), rep_mfcc=float(rep_mfcc)) # make json happy
+        if within:
+            result['within'] = within_rsa
+        return result
 
     def rsa_string(self, net=None):
-            # Full RSA
-            if net is None:
-                pred = self.pred
-            else:
-                with testing(net):
-                   pred = self.encode_sentences(net, self.sentence_data, batch_size=self.config['batch_size'])
-            if hasattr(net, 'mapper') and net.mapper is not None:
-                # FIXME do something reasonable here
-                #print("This is a text net")
-                mfcc = numpy.array([ numpy.zeros((1)) for audio in self.sentence_data])
-            else:
-                #print("This is an audio net")
-                mfcc = numpy.array([ audio.mean(axis=0) for audio in self.sentence_data])
-            sim_mfcc = cosine_similarity(mfcc)
-            sim_pred = cosine_similarity(pred)
-            
-            string_rep = scipy.stats.pearsonr(triu(self.string_sim), triu(sim_pred))[0]
-            string_mfcc = scipy.stats.pearsonr(triu(self.string_sim), triu(sim_mfcc))[0]
-            rep_mfcc = scipy.stats.pearsonr(triu(sim_pred), triu(sim_mfcc))[0]
-            result = dict(string_rep=float(string_rep), string_mfcc=float(string_mfcc), rep_mfcc=float(rep_mfcc)) # make json happy
-            return result
+        # Full RSA
+        if net is None:
+            pred = self.pred
+        else:
+            with testing(net):
+               pred = self.encode_sentences(net, self.sentence_data, batch_size=self.config['batch_size'])
+        if hasattr(net, 'mapper') and net.mapper is not None:
+            # FIXME do something reasonable here
+            #print("This is a text net")
+            mfcc = numpy.array([ numpy.zeros((1)) for audio in self.sentence_data])
+        else:
+            #print("This is an audio net")
+            mfcc = numpy.array([ audio.mean(axis=0) for audio in self.sentence_data])
+        sim_mfcc = cosine_similarity(mfcc)
+        sim_pred = cosine_similarity(pred)
+
+        string_rep = scipy.stats.pearsonr(triu(self.string_sim), triu(sim_pred))[0]
+        string_mfcc = scipy.stats.pearsonr(triu(self.string_sim), triu(sim_mfcc))[0]
+        rep_mfcc = scipy.stats.pearsonr(triu(sim_pred), triu(sim_mfcc))[0]
+        result = dict(string_rep=float(string_rep), string_mfcc=float(string_mfcc), rep_mfcc=float(rep_mfcc)) # make json happy
+        return result
 
     def retrieval(self, net=None):
-            img_fs = self.encode_images(net, [ s['feat'] for s in self.images ])
-            if net is None:
-                pred = self.pred
-            else:
-                with testing(net):
-                    pred = self.encode_sentences(net, self.sentence_data, batch_size=self.config['batch_size'])
+        img_fs = self.encode_images(net, [ s['feat'] for s in self.images ])
+        if net is None:
+            pred = self.pred
+        else:
+            with testing(net):
+                pred = self.encode_sentences(net, self.sentence_data, batch_size=self.config['batch_size'])
 
-            result = {}
-            ret = ranking(img_fs, pred, self.correct_img, ns=(1,5,10), exclude_self=False)
-            result['recall@1'] = numpy.mean(ret['recall'][1])
-            result['recall@5'] = numpy.mean(ret['recall'][5])
-            result['recall@10'] = numpy.mean(ret['recall'][10])
-            result['medr'] = numpy.median(ret['ranks'])
-            return result
-    
+        result = {}
+        ret = ranking(img_fs, pred, self.correct_img, ns=(1,5,10), exclude_self=False)
+        result['recall@1'] = numpy.mean(ret['recall'][1])
+        result['recall@5'] = numpy.mean(ret['recall'][5])
+        result['recall@10'] = numpy.mean(ret['recall'][10])
+        result['medr'] = numpy.median(ret['ranks'])
+        return result
+
     def retrieval_para(self, net=None):
-            if net is None:
-                pred = self.pred
-            else:
-                with testing(net):
-                   pred = self.encode_sentences(net, self.sentence_data, batch_size=self.config['batch_size'])
+        if net is None:
+            pred = self.pred
+        else:
+            with testing(net):
+               pred = self.encode_sentences(net, self.sentence_data, batch_size=self.config['batch_size'])
 
-            result = {}
-            ret = paraphrase_ranking(pred, self.correct_para, ns=(1,5,10))
-            result['recall@1'] = numpy.mean(ret['recall'][1])
-            result['recall@5'] = numpy.mean(ret['recall'][5])
-            result['recall@10'] = numpy.mean(ret['recall'][10])
-            result['medr'] = numpy.median(ret['ranks'])
-            return result
-    
+        result = {}
+        ret = paraphrase_ranking(pred, self.correct_para, ns=(1,5,10))
+        result['recall@1'] = numpy.mean(ret['recall'][1])
+        result['recall@5'] = numpy.mean(ret['recall'][5])
+        result['recall@10'] = numpy.mean(ret['recall'][10])
+        result['medr'] = numpy.median(ret['ranks'])
+        return result
+
 def rer(hi, lo):
     return ((1-lo)-(1-hi))/(1-lo)
 
@@ -239,8 +238,8 @@ def triu(x):
     ones  = numpy.ones_like(x)
     return x[numpy.triu(ones, k=1) == 1]
 
-def RSA(M, N):                                                                                                       
-    return round(scipy.stats.pearsonr(triu(M), triu(N))[0],3)    
+def RSA(M, N):
+    return round(scipy.stats.pearsonr(triu(M), triu(N))[0],3)
 
 def encode_sentences(task, audios, batch_size=128):
     return numpy.vstack([ task.predict(
@@ -262,10 +261,10 @@ def encode_images(task, imgs, batch_size=128):
                                 numpy.vstack(batch))).cuda()).data.cpu().numpy()
                           for batch in util.grouper(imgs, batch_size) ])
 
-def encode_sentences_SpeechText(task, audios, batch_size=128):                                                       
-    def predict(x):                                                                                            
+def encode_sentences_SpeechText(task, audios, batch_size=128):
+    def predict(x):
         return task.SpeechText.SpeechEncoderTop(task.SpeechText.SpeechEncoderBottom(x))
-    return numpy.vstack([ predict(                                              
+    return numpy.vstack([ predict(
                 torch.autograd.Variable(torch.from_numpy(
                          vector_padder(batch))).cuda()).data.cpu().numpy()
                                for batch in util.grouper(audios, batch_size) ])
