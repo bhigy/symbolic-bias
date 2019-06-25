@@ -16,7 +16,6 @@ import json
 
 
 def step(task, *args):
-
     loss = task.train_cost(*args)
     task.optimizer.zero_grad()
     loss.backward()
@@ -25,7 +24,6 @@ def step(task, *args):
 
 
 class SpeechText(nn.Module):
-
     def __init__(self, speech_encoder, text_encoder, config):
         super(SpeechText, self).__init__()
         self.config = config
@@ -50,7 +48,6 @@ class SpeechText(nn.Module):
 
 
 class SpeechImage(nn.Module):
-
     def __init__(self, speech_encoder, config):
         super(SpeechImage, self).__init__()
         self.config = config
@@ -110,7 +107,6 @@ class TextImage(nn.Module):
 
 
 class SpeechTranscriber(nn.Module):
-
     def __init__(self, speech_encoder, config):
         super(SpeechTranscriber, self).__init__()
         self.config = config
@@ -122,8 +118,9 @@ class SpeechTranscriber(nn.Module):
     def cost(self, speech, target, target_prev):
         states, rep = self.SpeechEncoderTop.states(self.SpeechEncoderBottom(speech))
         target_logits = self.TextDecoder(states, rep, target_prev)
-        cost = F.cross_entropy(target_logits.view(target_logits.size(0) * target_logits.size(1), -1),
-                               target.view(target.size(0)*target.size(1)))
+        cost = F.cross_entropy(
+            target_logits.view(target_logits.size(0) * target_logits.size(1), -1),
+            target.view(target.size(0)*target.size(1)))
         return cost
 
     def args(self, item):
@@ -136,20 +133,19 @@ class SpeechTranscriber(nn.Module):
 
 
 class Net(nn.Module):
-
     def __init__(self, config):
         super(Net, self).__init__()
         self.SpeechEncoderBottom = SpeechEncoderBottom(**config['SpeechEncoderBottom'])
         self.TextEncoderBottom = TextEncoderBottom(**config['TextEncoderBottom']) \
-                                if config.get('TextEncoderBottom') else None
+                if config.get('TextEncoderBottom') else None
         self.SpeechText = SpeechText(self.SpeechEncoderBottom, self.TextEncoderBottom, config['SpeechText'])  \
-                                if config.get('SpeechText') else None
+                if config.get('SpeechText') else None
         self.SpeechImage = SpeechImage(self.SpeechEncoderBottom, config['SpeechImage']) \
-                                if config.get('SpeechText') else None
+                if config.get('SpeechText') else None
         self.TextImage = TextImage(self.TextEncoderBottom, config['TextImage']) \
-                                if config.get('TextImage') else None
+                if config.get('TextImage') else None
         self.SpeechTranscriber = SpeechTranscriber(self.SpeechEncoderBottom, config['SpeechTranscriber']) \
-                                if config.get('SpeechTranscriber') else None
+                if config.get('SpeechTranscriber') else None
 
     def encode_images(self, images):
         with testing(self):
@@ -173,8 +169,8 @@ def encode_images_TextImage(task, imgs, batch_size=128):
     """Project imgs to the joint space using model.
     """
     return np.vstack([task.TextImage.encode_images(
-                            torch.autograd.Variable(torch.from_numpy(
-                                np.vstack(batch))).cuda()).data.cpu().numpy()
+        torch.autograd.Variable(torch.from_numpy(
+            np.vstack(batch))).cuda()).data.cpu().numpy()
         for batch in util.grouper(imgs, batch_size)])
 
 
@@ -233,14 +229,13 @@ def experiment(net, data, run_config):
                     sys.stdout.flush()
             torch.save(net, "model.{}.pkl".format(epoch))
 
-            # FIXME: replace evaluation
-            #with testing(net):
-            #    result = dict(epoch=epoch,
-            #                  rsa=scorer.rsa_image(net),
-            #                  retrieval=scorer.retrieval(net),
-            #                  speaker_id=scorer.speaker_id(net))
-            #    out.write(json.dumps(result))
-            #    out.write("\n")
-            #    out.flush()
+            with testing(net):
+                result = dict(epoch=epoch,
+                              rsa=scorer.rsa_image(net),
+                              retrieval=scorer.retrieval(net),
+                              speaker_id=scorer.speaker_id(net))
+                out.write(json.dumps(result))
+                out.write("\n")
+                out.flush()
 
     torch.save(net, "model.pkl")

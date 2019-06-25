@@ -16,5 +16,4 @@ setup(name='symbolic_bias',
           'scikit-learn == 0.20.1',
           'scipy == 1.2.0rc2',
           'python-Levenshtein == 0.12.0'
-          
       ])

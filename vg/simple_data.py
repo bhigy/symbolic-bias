@@ -188,9 +188,11 @@ def scale_utterance(data):
 
 class SimpleData(object):
     """Training / validation data prepared to feed to the model."""
-    def __init__(self, provider, tokenize=words, min_df=10, scale=True, scale_input=False, scale_utt=False,
-                batch_size=64, shuffle=False, limit=None, curriculum=False, by_speaker=False, val_vocab=False,
-                visual=True, erasure=5, midpoint=False, sigma=None, noise_tied=False, speakers=None):
+    def __init__(self, provider, tokenize=words, min_df=10, scale=True,
+                 scale_input=False, scale_utt=False, batch_size=64,
+                 shuffle=False, limit=None, curriculum=False, by_speaker=False,
+                 val_vocab=False, visual=True, erasure=5, midpoint=False,
+                 sigma=None, noise_tied=False, speakers=None):
         autoassign(locals())
         self.data = {}
         self.mapper = IdMapper(min_df=self.min_df)
