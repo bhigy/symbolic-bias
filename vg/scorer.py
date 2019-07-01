@@ -262,8 +262,8 @@ class ScorerASR:
         self.prov = prov
         self.config = config
         self.sentences = []
-        self.encode_sentences = config.get('encode_sentences',
-                                           encode_sentences)
+        self.decode_sentences = config.get('decode_sentences',
+                                           decode_sentences)
         for image in prov.iterImages(split=config['split']):
             for sent in image['sentences']:
                 self.sentences.append(sent)
@@ -271,11 +271,11 @@ class ScorerASR:
 
         self.net = net
         if self.net is not None:
-            self.pred = self.encode_sentences(
+            self.pred = self.decode_sentences(
                 self.net, self.sentence_data,
-                batch_size=self.config['batch_size'])
+                batch_size=1)
 
-    @static
+    @staticmethod
     def nbeditops(s1, s2):
         d = 0
         i = 0
@@ -294,16 +294,17 @@ class ScorerASR:
             pred = self.pred
         else:
             with testing(net):
-                pred = self.encode_sentences(
+                pred = self.decode_sentences(
                     net, self.sentence_data,
-                    batch_size=self.config['batch_size'])
+                    batch_size=1)
 
         delete = 0
         insert = 0
         substitute = 0
         nbchar = 0
-        for tgt, p in zip(self.sentence_data, pred):
-            d, i, s = self.nbeditopt(tgt, p)
+        for sent, p in zip(self.sentences, pred):
+            tgt = sent['raw']
+            d, i, s = self.nbeditops(tgt, p)
             delete += d
             insert += i
             substitute += s
@@ -333,10 +334,18 @@ def encode_sentences(task, audios, batch_size=128):
         for batch in util.grouper(audios, batch_size)])
 
 
+def decode_sentences(task, audios, batch_size=128):
+    return [task.predict(
+        torch.autograd.Variable(torch.from_numpy(
+            vector_padder(batch))).cuda())
+        for batch in util.grouper(audios, batch_size)]
+
+
 def encode_texts(task, texts, batch_size=128):
     return numpy.vstack([task.predict(
         torch.autograd.Variable(torch.from_numpy(
-            task.batcher.batch_inp(task.mapper.transform(batch)).astype('int64'))).cuda()).data.cpu().numpy()
+            task.batcher.batch_inp(task.mapper.transform(
+                batch)).astype('int64'))).cuda()).data.cpu().numpy()
         for batch in util.grouper(texts, batch_size)])
 
 

@@ -9,7 +9,6 @@ import scipy.io
 import logging
 
 class Provider:
-
   def __init__(self, dataset, root='.', audio_kind='mfcc', truncate=None):
     assert dataset == 'flickr8k'
     assert audio_kind == 'mfcc'
@@ -42,7 +41,6 @@ class Provider:
                 sentence['speaker'] = "flickr8k_" + W2S[uttid]
                 self.speakers.add(sentence['speaker'])
 
-
   def _iterImages(self, split):
         for image in self.dataset['images']:
             if image['split'] == split:
@@ -65,10 +63,11 @@ class Provider:
         else:
             return sorted(self._iterSentences(split), key=lambda _: np.random.random())
 
+
 def touttid(key):
     a, b, c = key.split('_')
     return "{}_{}_{}.wav".format(a, b, c)
 
+
 def getDataProvider(*args, **kwargs):
 	return Provider(*args, **kwargs)
-

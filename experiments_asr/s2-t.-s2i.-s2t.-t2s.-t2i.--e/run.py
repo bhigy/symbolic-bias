@@ -19,7 +19,8 @@ limit = None
 
 # Parse command line parameters
 parser = argparse.ArgumentParser()
-parser.add_argument('-t', help='Test mode', dest='testmode', action='store_true', default=False)
+parser.add_argument('-t', help='Test mode', dest='testmode',
+                    action='store_true', default=False)
 args = parser.parse_args()
 
 # Setup test mode
@@ -48,11 +49,13 @@ model_config = dict(
             size_attn=128),
         TextDecoder=dict(
             size=1024,
-            size_target_vocab=1024,
+            size_target_vocab=data_flickr.mapper.ids.max,
             size_embed=64,
             depth=1),
         lr=0.0002,
-        max_norm=2.0))
+        max_norm=2.0,
+        mapper=data_flickr.mapper),
+    max_output_length=76) # max length for annotations is 38
 
 
 def audio(sent):

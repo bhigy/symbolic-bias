@@ -31,6 +31,7 @@ class SimpleDecoder(nn.Module):
 
 
     def forward(self, prev, rep):
+        # FIXME: previous symbol or previous h?
         R = rep.expand(self.depth, rep.size(0), rep.size(1))
         out, last = self.RNN(self.Embed(prev), R)
         return out, last

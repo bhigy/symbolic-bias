@@ -27,7 +27,6 @@ def step(task, *args):
     return loss
 
 class SpeechText(nn.Module):
-
     def __init__(self, speech_encoder, text_encoder, config):
         super(SpeechText, self).__init__()
         self.config = config
@@ -53,7 +52,6 @@ class SpeechText(nn.Module):
 
 
 class SpeechImage(nn.Module):
-
     def __init__(self, speech_encoder, config):
         super(SpeechImage, self).__init__()
         self.config = config
@@ -76,8 +74,8 @@ class SpeechImage(nn.Module):
         with testing(self):
             return self.cost(*args)
 
-class TextImage(nn.Module):
 
+class TextImage(nn.Module):
     def __init__(self, text_encoder, config):
         super(TextImage, self).__init__()
         self.config = config
@@ -110,8 +108,8 @@ class TextImage(nn.Module):
             rep = self.TextEncoderTop(self.TextEncoderBottom(text))
         return rep
 
-class SpeechTranscriber(nn.Module):
 
+class SpeechTranscriber(nn.Module):
     def __init__(self, speech_encoder, config):
         super(SpeechTranscriber, self).__init__()
         self.config = config
@@ -134,8 +132,8 @@ class SpeechTranscriber(nn.Module):
         with testing(self):
             return self.cost(*args)
 
-class Net(nn.Module):
 
+clas Net(nn.Module):
     def __init__(self, config):
         super(Net, self).__init__()
         self.SpeechEncoderBottom = SpeechEncoderBottom(**config['SpeechEncoderBottom'])

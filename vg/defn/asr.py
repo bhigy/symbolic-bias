@@ -29,13 +29,24 @@ class SpeechTranscriber(nn.Module):
         self.SpeechEncoderTop = SpeechEncoderTop(**config['SpeechEncoderTop'])
         self.TextDecoder = DecoderWithAttn(**config['TextDecoder'])
         self.optimizer = optim.Adam(self.parameters(), lr=config['lr'])
+        self.mapper = config['mapper']
+        self.sos = torch.LongTensor([[self.mapper.BEG_ID]]).cuda()
 
     def cost(self, speech, target, target_prev):
         states, rep = self.SpeechEncoderTop.states(self.SpeechEncoderBottom(speech))
         target_logits = self.TextDecoder(states, rep, target_prev)
-        cost = F.cross_entropy(
-            target_logits.view(target_logits.size(0) * target_logits.size(1), -1),
-            target.view(target.size(0)*target.size(1)))
+
+        # Masking padding
+        nb_tokens = self.mapper.ids.max
+        # * flatten vectors
+        target = target.view(-1)
+        target_logits = target_logits.view(-1, nb_tokens)
+        # * compute and apply mask
+        mask = (target != self.mapper.BEG_ID)
+        target = target[mask]
+        target_logits = target_logits[mask, :]
+
+        cost = F.cross_entropy(target_logits, target)
         return cost
 
     def args(self, item):
@@ -46,13 +57,6 @@ class SpeechTranscriber(nn.Module):
         with testing(self):
             return self.cost(*args)
 
-    # FIXME: implement
-    def predict(self, audio):
-        raise NotImplemented
-        with testing(self):
-            rep = self.SpeechImage.SpeechEncoderTop(self.SpeechImage.SpeechEncoderBottom(audio))
-        return rep
-
 
 class Net(nn.Module):
     def __init__(self, config):
@@ -60,6 +64,21 @@ class Net(nn.Module):
         self.SpeechEncoderBottom = SpeechEncoderBottom(**config['SpeechEncoderBottom'])
         self.SpeechTranscriber = SpeechTranscriber(self.SpeechEncoderBottom,
                                                    config['SpeechTranscriber'])
+        self.max_output_length = config['max_output_length']
+
+    def predict(self, audio):
+        pred = []
+        with testing(self):
+            states, rep = self.SpeechTranscriber.SpeechEncoderTop.states(
+                self.SpeechTranscriber.SpeechEncoderBottom(audio))
+            out = self.SpeechTranscriber.sos
+            while out.item() != self.SpeechTranscriber.mapper.END_ID and \
+                  len(pred) < self.max_output_length:
+                out = self.SpeechTranscriber.TextDecoder(states, rep, out)
+                imax = out[0, 0].argmax()
+                pred.append(self.SpeechTranscriber.mapper.ids.from_id(imax.item()))
+                out = imax.view(1, 1)
+        return ''.join(pred)
 
 
 def valid_loss(net, task, data):
@@ -86,7 +105,6 @@ def experiment(net, data, run_config):
             cost = Counter()
 
             for _j, item in enumerate(data.iter_train_batches(reshuffle=True)):
-                import pdb; pdb.set_trace()
                 j = _j + 1
                 spk = item['speaker'][0] if len(set(item['speaker'])) == 1 else 'MIXED'
                 args = task.args(item)
@@ -111,7 +129,6 @@ def experiment(net, data, run_config):
                 sys.stdout.flush()
             torch.save(net, "model.{}.pkl".format(epoch))
 
-            # FIXME: replace evaluation
             with testing(net):
                 result = dict(epoch=epoch,
                               cer=scorer.cer(net))

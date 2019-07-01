@@ -15,17 +15,22 @@ import itertools
 def words(sentence):
     return sentence['tokens']
 
+
 def characters(sentence):
     return list(sentence['raw'])
+
 
 def compressed(sentence):
     return [ c.lower() for c in sentence['raw'] if c in string.letters ]
 
+
 def phonemes(sentence):
     return [ pho for pho in sentence['ipa'] if pho != "*" ]
 
+
 def transcription(sentence):
     return list(sentence['transcription'])
+
 
 class NoScaler():
     def __init__(self):
@@ -37,8 +42,8 @@ class NoScaler():
     def inverse_transform(self, x):
         return x
 
-class InputScaler():
 
+class InputScaler():
     def __init__(self):
         self.scaler = StandardScaler()
 
@@ -53,6 +58,7 @@ class InputScaler():
     def inverse_transform(self, data):
         return [ self.scaler.inverse_transform(X) for X in data ]
 
+
 def vector_padder(vecs):
         """Pads each vector in vecs with zeros at the beginning. Returns 3D tensor with dimensions:
            (BATCH_SIZE, SAMPLE_LENGTH, NUMBER_FEATURES).
@@ -65,8 +71,8 @@ def vector_padder(vecs):
         return numpy.array([ numpy.vstack([numpy.zeros((max_len-len(vec), vec.shape[1])) , vec])
                             for vec in vecs ], dtype='float32')
 
-class Batcher(object):
 
+class Batcher(object):
     def __init__(self, mapper, pad_end=False, visual=True, erasure=(5,5), sigma=None, noise_tied=False, midpoint=False):
         autoassign(locals())
         self.BEG = self.mapper.BEG_ID
@@ -199,11 +205,14 @@ class SimpleData(object):
         self.scaler = StandardScaler() if scale else NoScaler()
         self.audio_scaler = InputScaler() if scale_input else NoScaler()
         self.speaker_encoder = LabelEncoder()
-        parts = insideout(self.shuffled(arrange(provider.iterImages(split='train'),
-                                                               tokenize=self.tokenize,
-                                                               limit=limit,
-                                                               speakers=speakers )))
-        parts_val = insideout(self.shuffled(arrange(provider.iterImages(split='val'), tokenize=self.tokenize)))
+        parts = insideout(self.shuffled(arrange(
+            provider.iterImages(split='train'),
+            tokenize=self.tokenize,
+            limit=limit,
+            speakers=speakers)))
+        parts_val = insideout(self.shuffled(arrange(
+            provider.iterImages(split='val'),
+            tokenize=self.tokenize)))
         # TRAINING
         if self.val_vocab:
             _ = list(self.mapper.fit_transform(parts['tokens_in'] + parts_val['tokens_in']))
@@ -244,7 +253,6 @@ class SimpleData(object):
             random.shuffle(zs)
             return zs
 
-
     def iter_train_batches(self, reshuffle=False):
         # sort data by length
         if self.curriculum:
@@ -280,29 +288,32 @@ class SimpleData(object):
         pickle.dump(self.batcher, gzip.open(os.path.join(model_path, 'batcher.pkl.gz'), 'w'),
                     protocol=pickle.HIGHEST_PROTOCOL)
 
+
 def by_speaker(batcher, data, batch_size=32):
       speaker = lambda x: x['speaker']
       for _, bunch in itertools.groupby(sorted(data, key=speaker), speaker):
           for item in util.grouper(bunch, batch_size):
              yield batcher.batch(item)
 
+
 def randomized(data):
     return sorted(data, key= lambda _: random.random())
 
+
 def arrange(data, tokenize=words, limit=None, speakers=None):
-    for i,image in enumerate(data):
+    for i, image in enumerate(data):
         if limit is not None and i > limit:
             break
         for sent in image['sentences']:
             speaker = sent.get('speaker')
             if speakers is None or speaker in speakers:
                 toks = tokenize(sent)
-                yield {'tokens_in':  toks,
+                yield {'tokens_in': toks,
                        'tokens_out': toks,
-                       'audio':       sent.get('audio'),
-                       'img':        image.get('feat'),
-                       'speaker':   speaker
-                        }
+                       'audio': sent.get('audio'),
+                       'img': image.get('feat'),
+                       'speaker': speaker
+                      }
 
 
 def insideout(ds):
@@ -314,6 +325,7 @@ def insideout(ds):
             result[k].append(v)
     return result
 
+
 def outsidein(d):
     """Transform a dictionary of lists to a list of dictionaries."""
     ds = []
@@ -323,6 +335,7 @@ def outsidein(d):
     for i in  range(len(list(d.values())[0])):
         ds.append(dict([(k, d[k][i]) for k in keys]))
     return ds
+
 
 class IdTable(object):
     """Map hashable objects to ints and vice versa."""
