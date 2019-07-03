@@ -122,7 +122,7 @@ class SpeechEncoderBottom(nn.Module):
             self.RNN = nn.GRU(self.filter_size, self.size, self.depth,
                               batch_first=True)
 
-    def forward(self, x):
+    def forward(self, x, x_len):
         if self.depth > 0:
             h0 = self.h0.expand(self.depth, x.size(0), self.size).cuda()
             out, last = self.RNN(self.Dropout(self.Conv(x)), h0)

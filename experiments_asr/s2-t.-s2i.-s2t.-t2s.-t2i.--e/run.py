@@ -16,6 +16,7 @@ import time
 batch_size = 16
 epochs = 25
 limit = None
+save_path = None
 
 # Parse command line parameters
 parser = argparse.ArgumentParser()
@@ -27,6 +28,7 @@ args = parser.parse_args()
 if args.testmode:
     epochs = 1
     limit = 100
+    save_path = "tmp"
 
 prov_flickr = dp_f.getDataProvider('flickr8k', root='../..', audio_kind='mfcc')
 data_flickr = sd.SimpleData(prov_flickr, tokenize=sd.characters, min_df=1,
@@ -55,7 +57,7 @@ model_config = dict(
         lr=0.0002,
         max_norm=2.0,
         mapper=data_flickr.mapper),
-    max_output_length=76) # max length for annotations is 38
+    max_output_length=400) # max length for annotations is 199
 
 
 def audio(sent):
@@ -73,7 +75,8 @@ scorer = vg.scorer.ScorerASR(prov_flickr,
 run_config = dict(epochs=epochs,
                   validate_period=400,
                   tasks=[('SpeechTranscriber', net.SpeechTranscriber)],
-                  Scorer=scorer)
+                  Scorer=scorer,
+                  save_path=save_path)
 D.experiment(net=net,
              data=data_flickr,
              run_config=run_config)

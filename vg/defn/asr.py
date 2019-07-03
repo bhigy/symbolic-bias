@@ -1,4 +1,6 @@
-# Pytorch version of imaginet.audiovis_rhn
+import os
+import time
+
 import numpy as np
 import torch.nn as nn
 import torch
@@ -32,8 +34,9 @@ class SpeechTranscriber(nn.Module):
         self.mapper = config['mapper']
         self.sos = torch.LongTensor([[self.mapper.BEG_ID]]).cuda()
 
-    def cost(self, speech, target, target_prev):
-        states, rep = self.SpeechEncoderTop.states(self.SpeechEncoderBottom(speech))
+    def cost(self, speech, target, target_prev, seq_len):
+        states, rep = self.SpeechEncoderTop.states(
+            self.SpeechEncoderBottom(speech, seq_len))
         target_logits = self.TextDecoder(states, rep, target_prev)
 
         # Masking padding
@@ -51,7 +54,7 @@ class SpeechTranscriber(nn.Module):
 
     def args(self, item):
         return (item['audio'], item['target_t'].astype('int64'),
-                item['target_prev_t'].astype('int64'))
+                item['target_prev_t'].astype('int64'), item['nb_frames'])
 
     def test_cost(self, *args):
         with testing(self):
@@ -66,12 +69,14 @@ class Net(nn.Module):
                                                    config['SpeechTranscriber'])
         self.max_output_length = config['max_output_length']
 
-    def predict(self, audio):
+    def predict(self, audio, audio_len):
+        # For now, works only for batch size = 1
         pred = []
         with testing(self):
             states, rep = self.SpeechTranscriber.SpeechEncoderTop.states(
-                self.SpeechTranscriber.SpeechEncoderBottom(audio))
-            out = self.SpeechTranscriber.sos
+                self.SpeechTranscriber.SpeechEncoderBottom(audio, audio_len))
+            batch_size = audio.shape[0]
+            out = self.SpeechTranscriber.sos.expand(batch_size, -1)
             while out.item() != self.SpeechTranscriber.mapper.END_ID and \
                   len(pred) < self.max_output_length:
                 out = self.SpeechTranscriber.TextDecoder(states, rep, out)
@@ -96,11 +101,19 @@ def experiment(net, data, run_config):
     net.train()
     scorer = run_config['Scorer']
     last_epoch = 0
+    result_fpath = "result.json"
+    model_fpath_tmpl = "model.{}.pkl"
+    if run_config['save_path'] is not None:
+        result_fpath = os.path.join(run_config['save_path'], result_fpath)
+        model_fpath_tmpl = os.path.join(run_config['save_path'], model_fpath_tmpl)
+
+
 
     for _, task in run_config['tasks']:
         task.optimizer.zero_grad()
 
-    with open("result.json", "w") as out:
+    with open(result_fpath, "w") as out:
+        t = time.time()
         for epoch in range(last_epoch+1, run_config['epochs'] + 1):
             cost = Counter()
 
@@ -127,13 +140,19 @@ def experiment(net, data, run_config):
                           "".join([str(np.mean(loss))]))
 
                 sys.stdout.flush()
-            torch.save(net, "model.{}.pkl".format(epoch))
+            torch.save(net, model_fpath_tmpl.format(epoch))
 
+            t2 = time.time()
+            print("Elapsed time: {:3f}".format(t2 - t))
+            t = t2
             with testing(net):
                 result = dict(epoch=epoch,
                               cer=scorer.cer(net))
                 out.write(json.dumps(result))
                 out.write("\n")
                 out.flush()
+            t2 = time.time()
+            print("Elapsed time: {:3f}".format(t2 - t))
+            t = t2
 
     torch.save(net, "model.pkl")

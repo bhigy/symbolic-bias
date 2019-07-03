@@ -59,21 +59,26 @@ class InputScaler():
         return [ self.scaler.inverse_transform(X) for X in data ]
 
 
-def vector_padder(vecs):
-        """Pads each vector in vecs with zeros at the beginning. Returns 3D tensor with dimensions:
+def vector_padder(vecs, pad_end=False):
+        """
+        Pads each vector in vecs with zeros. Pad at the beggining or the end
+        depending on pad_end. Returns 3D tensor
+        with dimensions:
            (BATCH_SIZE, SAMPLE_LENGTH, NUMBER_FEATURES).
         """
-
         max_len = max(map(len, vecs))
-        #for vec in vecs:
-        #    assert len(vec.shape) == 2, "Broken vector {}".format(vec)
-
-        return numpy.array([ numpy.vstack([numpy.zeros((max_len-len(vec), vec.shape[1])) , vec])
-                            for vec in vecs ], dtype='float32')
+        if pad_end:
+            padded = [numpy.vstack([vec, numpy.zeros((max_len-len(vec), vec.shape[1]))])
+                      for vec in vecs]
+        else:
+            padded = [numpy.vstack([numpy.zeros((max_len-len(vec), vec.shape[1])), vec])
+                      for vec in vecs]
+        return numpy.array(padded, dtype='float32')
 
 
 class Batcher(object):
-    def __init__(self, mapper, pad_end=False, visual=True, erasure=(5,5), sigma=None, noise_tied=False, midpoint=False):
+    def __init__(self, mapper, pad_end=False, visual=True, erasure=(5,5),
+                 sigma=None, noise_tied=False, midpoint=False):
         autoassign(locals())
         self.BEG = self.mapper.BEG_ID
         self.END = self.mapper.END_ID
@@ -84,13 +89,13 @@ class Batcher(object):
             self.gap_low = self.erasure
             self.gap_high = self.erasure + 1
 
-    def pad(self, xss): # PAD AT BEGINNING
+    def pad(self, xss):  # padding et beggining or end depending on self.pad_end
         max_len = max((len(xs) for xs in xss))
         def pad_one(xs):
             if self.pad_end:
-                return xs + [ self.END for _ in range(0,(max_len-len(xs))) ]
-            return [ self.BEG for _ in range(0,(max_len-len(xs))) ] + xs
-        return [ pad_one(xs) for xs in xss ]
+                return xs + [self.END for _ in range(0, (max_len-len(xs)))]
+            return [self.BEG for _ in range(0, (max_len-len(xs)))] + xs
+        return [pad_one(xs) for xs in xss]
 
     def batch_inp(self, sents):
         mb = self.padder(sents)
@@ -104,6 +109,8 @@ class Batcher(object):
         """Prepare minibatch.
         Returns:
         - input string
+        - string original length
+        - audio original length (in frames)
         - visual target vector
         - output string at t-1
         - target string
@@ -117,8 +124,12 @@ class Batcher(object):
         target_v = numpy.array([ x['img'] for x in gr ], dtype='float32')
         gap = numpy.random.randint(self.gap_low, self.gap_high, 1)[0]
 
-        L_aud =  [len(x['audio']) for x in gr ]
-        audio = vector_padder([ x['audio'] for x in gr ]) if gr[0]['audio']  is not None else None
+        L_aud = [len(x['audio']) for x in gr]
+        if gr[0] is not None:
+            audio = [x['audio'] for x in gr]
+            audio = vector_padder(audio, pad_end=self.pad_end)
+        else:
+            audio = None
         if self.midpoint:
             mid = midpoint(audio.shape[1] , max(L_aud) - int(numpy.median(L_aud)))
         else:
@@ -160,22 +171,24 @@ class Batcher(object):
         assert audio_1.shape == audio_1_prev.shape
         assert audio_3.shape == audio_3_prev.shape
 
-        return { 'input': inp,
-                 'input_beg': inp_beg,
-                 'input_end': inp_end,
-                 'target_v':target_v if self.visual else None,
-                 'target_prev_t':target_prev_t,
-                 'target_t':target_t,
-                 'audio': audio,
-                 'audio_beg': audio_beg,
-                 'audio_end': audio_end,
-                 'audio_1': audio_1,
-                 'audio_1_prev': audio_1_prev,
-                 'audio_2': audio_2,
-                 'audio_3_prev': audio_3_prev,
-                 'audio_3': audio_3,
-                 'speaker': numpy.array([ x['speaker'] for x in gr ]),
-                 'speaker_id': numpy.array([ x['speaker_id'] for x in gr ])
+        return {'input': inp,
+                'input_beg': inp_beg,
+                'input_end': inp_end,
+                'target_v':target_v if self.visual else None,
+                'target_prev_t':target_prev_t,
+                'target_t':target_t,
+                'audio': audio,
+                'audio_beg': audio_beg,
+                'audio_end': audio_end,
+                'audio_1': audio_1,
+                'audio_1_prev': audio_1_prev,
+                'audio_2': audio_2,
+                'audio_3_prev': audio_3_prev,
+                'audio_3': audio_3,
+                'speaker': numpy.array([ x['speaker'] for x in gr ]),
+                'speaker_id': numpy.array([ x['speaker_id'] for x in gr ]),
+                'nb_tokens': numpy.array(L_tok),
+                'nb_frames': numpy.array(L_aud)
                 }
 
 
@@ -243,7 +256,9 @@ class SimpleData(object):
             parts_val['audio'] = scale_utterance(parts_val['audio'])
         parts_val['speaker_id'] = self.speaker_encoder.transform(parts_val['speaker'])
         self.data['valid'] = outsidein(parts_val)
-        self.batcher = Batcher(self.mapper, pad_end=False, visual=visual, erasure=erasure, sigma=sigma, noise_tied=noise_tied, midpoint=midpoint)
+        self.batcher = Batcher(self.mapper, pad_end=True, visual=visual,
+                               erasure=erasure, sigma=sigma,
+                               noise_tied=noise_tied, midpoint=midpoint)
 
     def shuffled(self, xs):
         if not self.shuffle:
@@ -266,7 +281,7 @@ class SimpleData(object):
             if reshuffle:
                 data = randomized(self.data['train'])
             for bunch in util.grouper(data, self.batch_size*20):
-                bunch_sort = [ bunch[i] for i in numpy.argsort([len(x['tokens_in']) for x in bunch]) ]
+                bunch_sort = [bunch[i] for i in numpy.argsort([len(x['audio']) for x in bunch])[::-1]]
                 for item in util.grouper(bunch_sort, self.batch_size):
                     yield self.batcher.batch(item)
 

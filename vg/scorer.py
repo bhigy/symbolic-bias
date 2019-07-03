@@ -271,9 +271,7 @@ class ScorerASR:
 
         self.net = net
         if self.net is not None:
-            self.pred = self.decode_sentences(
-                self.net, self.sentence_data,
-                batch_size=1)
+            self.pred = self.decode_sentences(self.net, self.sentence_data)
 
     @staticmethod
     def nbeditops(s1, s2):
@@ -294,9 +292,7 @@ class ScorerASR:
             pred = self.pred
         else:
             with testing(net):
-                pred = self.decode_sentences(
-                    net, self.sentence_data,
-                    batch_size=1)
+                pred = self.decode_sentences(net, self.sentence_data)
 
         delete = 0
         insert = 0
@@ -334,11 +330,17 @@ def encode_sentences(task, audios, batch_size=128):
         for batch in util.grouper(audios, batch_size)])
 
 
-def decode_sentences(task, audios, batch_size=128):
-    return [task.predict(
-        torch.autograd.Variable(torch.from_numpy(
-            vector_padder(batch))).cuda())
-        for batch in util.grouper(audios, batch_size)]
+def decode_sentences(task, audio, batch_size=1):
+    # For now, works only for batch size = 1
+    pred = []
+    for batch in util.grouper(audio, batch_size):
+        audio_len = [a.shape[0] for a in batch]
+        v_audio = torch.autograd.Variable(torch.from_numpy(
+            vector_padder(batch, pad_end=True))).cuda()
+        v_audio_len = torch.autograd.Variable(torch.from_numpy(
+            numpy.array(audio_len))).cuda()
+        pred.append(task.predict(v_audio, v_audio_len))
+    return pred
 
 
 def encode_texts(task, texts, batch_size=128):
