@@ -330,8 +330,7 @@ def encode_sentences(task, audios, batch_size=128):
         for batch in util.grouper(audios, batch_size)])
 
 
-def decode_sentences(task, audio, batch_size=1):
-    # For now, works only for batch size = 1
+def decode_sentences(task, audio, batch_size=128):
     pred = []
     for batch in util.grouper(audio, batch_size):
         audio_len = [a.shape[0] for a in batch]

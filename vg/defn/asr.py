@@ -9,7 +9,7 @@ import torch.optim as optim
 import torch.autograd
 from vg.scorer import testing
 from vg.defn.encoders import SpeechEncoderBottom, SpeechEncoderTop
-from vg.defn.decoders import DecoderWithAttn
+from vg.defn.decoders import BahdanauAttnDecoderRNN
 from collections import Counter
 import sys
 import json
@@ -29,15 +29,32 @@ class SpeechTranscriber(nn.Module):
         self.config = config
         self.SpeechEncoderBottom = speech_encoder
         self.SpeechEncoderTop = SpeechEncoderTop(**config['SpeechEncoderTop'])
-        self.TextDecoder = DecoderWithAttn(**config['TextDecoder'])
+        #self.TextDecoder = DecoderWithAttn(**config['TextDecoder'])
+        self.TextDecoder = BahdanauAttnDecoderRNN(**config['TextDecoder'])
         self.optimizer = optim.Adam(self.parameters(), lr=config['lr'])
         self.mapper = config['mapper']
-        self.sos = torch.LongTensor([[self.mapper.BEG_ID]]).cuda()
 
-    def cost(self, speech, target, target_prev, seq_len):
+    def forward(self, speech, seq_len, target=None):
         states, rep = self.SpeechEncoderTop.states(
             self.SpeechEncoderBottom(speech, seq_len))
-        target_logits = self.TextDecoder(states, rep, target_prev)
+        logits, attn_weights = self.TextDecoder.decode(states, target)
+        return logits
+
+    def predict(self, audio, audio_len):
+        pred = []
+        with testing(self):
+            logits = self.forward(audio, audio_len)
+            ids = logits.argmax(dim=2)
+            for i_seq in range(ids.shape[0]):
+                seq = ids[i_seq]
+                i_eos = (seq == self.mapper.END_ID).nonzero()
+                i_last = i_eos[0] if i_eos.shape[0] > 0 else seq.shape[0]
+                chars = [self.mapper.ids.from_id(id.item()) for id in seq[:i_last]]
+                pred.append(''.join(chars))
+        return pred
+
+    def cost(self, speech, target, seq_len):
+        target_logits = self.forward(speech, seq_len, target)
 
         # Masking padding
         nb_tokens = self.mapper.ids.max
@@ -54,7 +71,7 @@ class SpeechTranscriber(nn.Module):
 
     def args(self, item):
         return (item['audio'], item['target_t'].astype('int64'),
-                item['target_prev_t'].astype('int64'), item['nb_frames'])
+                item['nb_frames'])
 
     def test_cost(self, *args):
         with testing(self):
@@ -67,28 +84,14 @@ class Net(nn.Module):
         self.SpeechEncoderBottom = SpeechEncoderBottom(**config['SpeechEncoderBottom'])
         self.SpeechTranscriber = SpeechTranscriber(self.SpeechEncoderBottom,
                                                    config['SpeechTranscriber'])
-        self.max_output_length = config['max_output_length']
 
     def predict(self, audio, audio_len):
-        # For now, works only for batch size = 1
-        pred = []
-        with testing(self):
-            states, rep = self.SpeechTranscriber.SpeechEncoderTop.states(
-                self.SpeechTranscriber.SpeechEncoderBottom(audio, audio_len))
-            batch_size = audio.shape[0]
-            out = self.SpeechTranscriber.sos.expand(batch_size, -1)
-            while out.item() != self.SpeechTranscriber.mapper.END_ID and \
-                  len(pred) < self.max_output_length:
-                out = self.SpeechTranscriber.TextDecoder(states, rep, out)
-                imax = out[0, 0].argmax()
-                pred.append(self.SpeechTranscriber.mapper.ids.from_id(imax.item()))
-                out = imax.view(1, 1)
-        return ''.join(pred)
+        return self.SpeechTranscriber.predict(audio, audio_len)
 
 
 def valid_loss(net, task, data):
     result = []
-    with testing(net): #net.eval()
+    with testing(net):
         for item in data.iter_valid_batches():
             args = task.args(item)
             args = [torch.autograd.Variable(torch.from_numpy(x)).cuda() for x in args]
@@ -105,9 +108,8 @@ def experiment(net, data, run_config):
     model_fpath_tmpl = "model.{}.pkl"
     if run_config['save_path'] is not None:
         result_fpath = os.path.join(run_config['save_path'], result_fpath)
-        model_fpath_tmpl = os.path.join(run_config['save_path'], model_fpath_tmpl)
-
-
+        model_fpath_tmpl = os.path.join(run_config['save_path'],
+                                        model_fpath_tmpl)
 
     for _, task in run_config['tasks']:
         task.optimizer.zero_grad()
@@ -117,6 +119,7 @@ def experiment(net, data, run_config):
         for epoch in range(last_epoch+1, run_config['epochs'] + 1):
             cost = Counter()
 
+            # FIXME: avoid end of epoch with small batch
             for _j, item in enumerate(data.iter_train_batches(reshuffle=True)):
                 j = _j + 1
                 spk = item['speaker'][0] if len(set(item['speaker'])) == 1 else 'MIXED'

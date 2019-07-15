@@ -16,7 +16,6 @@ class TextEncoder(nn.Module):
         super(TextEncoder, self).__init__()
         util.autoassign(locals())
         self.h0 = torch.autograd.Variable(torch.zeros(self.depth, 1, self.size))
-        # TODO: check what happen when padding_idx is not given like here
         self.Embed = nn.Embedding(self.size_feature, self.size_embed)
         self.Dropout = nn.Dropout(p=self.dropout_p)
         self.RNN = nn.GRU(self.size_embed, self.size, self.depth,

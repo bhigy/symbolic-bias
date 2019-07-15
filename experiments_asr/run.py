@@ -13,7 +13,7 @@ import vg.scorer
 
 import time
 
-batch_size = 16
+batch_size = 8 # 16
 epochs = 25
 limit = None
 save_path = None
@@ -30,7 +30,7 @@ if args.testmode:
     limit = 100
     save_path = "tmp"
 
-prov_flickr = dp_f.getDataProvider('flickr8k', root='../..', audio_kind='mfcc')
+prov_flickr = dp_f.getDataProvider('flickr8k', root='..', audio_kind='mfcc')
 data_flickr = sd.SimpleData(prov_flickr, tokenize=sd.characters, min_df=1,
                             scale=False, batch_size=batch_size, shuffle=True,
                             limit=limit)
@@ -50,14 +50,15 @@ model_config = dict(
             depth=0,
             size_attn=128),
         TextDecoder=dict(
-            size=1024,
-            size_target_vocab=data_flickr.mapper.ids.max,
-            size_embed=64,
-            depth=1),
+            hidden_size=1024,
+            output_size=data_flickr.mapper.ids.max,
+            sos_id=data_flickr.mapper.BEG_ID,
+            #size_embed=64,
+            depth=1,
+            max_output_length=400), # max length for annotations is 199
         lr=0.0002,
         max_norm=2.0,
-        mapper=data_flickr.mapper),
-    max_output_length=400) # max length for annotations is 199
+        mapper=data_flickr.mapper))
 
 
 def audio(sent):
