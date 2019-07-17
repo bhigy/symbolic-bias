@@ -29,11 +29,11 @@ class SpeechTranscriber(nn.Module):
         self.config = config
         self.SpeechEncoderBottom = speech_encoder
         self.SpeechEncoderTop = SpeechEncoderTop(**config['SpeechEncoderTop'])
-        #self.TextDecoder = DecoderWithAttn(**config['TextDecoder'])
         self.TextDecoder = BahdanauAttnDecoderRNN(**config['TextDecoder'])
         self.optimizer = optim.Adam(self.parameters(), lr=config['lr'])
         self.mapper = config['mapper']
 
+    # FIXME: memory issue when returning attention weights???
     def forward(self, speech, seq_len, target=None):
         states, rep = self.SpeechEncoderTop.states(
             self.SpeechEncoderBottom(speech, seq_len))
@@ -41,16 +41,19 @@ class SpeechTranscriber(nn.Module):
         return logits
 
     def predict(self, audio, audio_len):
-        pred = []
         with testing(self):
             logits = self.forward(audio, audio_len)
-            ids = logits.argmax(dim=2)
-            for i_seq in range(ids.shape[0]):
-                seq = ids[i_seq]
-                i_eos = (seq == self.mapper.END_ID).nonzero()
-                i_last = i_eos[0] if i_eos.shape[0] > 0 else seq.shape[0]
-                chars = [self.mapper.ids.from_id(id.item()) for id in seq[:i_last]]
-                pred.append(''.join(chars))
+        return self.logits2pred(logits)
+
+    def logits2pred(self, logits):
+        pred = []
+        ids = logits.argmax(dim=2)
+        for i_seq in range(ids.shape[0]):
+            seq = ids[i_seq]
+            i_eos = (seq == self.mapper.END_ID).nonzero()
+            i_last = i_eos[0] if i_eos.shape[0] > 0 else seq.shape[0]
+            chars = [self.mapper.ids.from_id(id.item()) for id in seq[:i_last]]
+            pred.append(''.join(chars))
         return pred
 
     def cost(self, speech, target, seq_len):
@@ -81,9 +84,10 @@ class SpeechTranscriber(nn.Module):
 class Net(nn.Module):
     def __init__(self, config):
         super(Net, self).__init__()
-        self.SpeechEncoderBottom = SpeechEncoderBottom(**config['SpeechEncoderBottom'])
-        self.SpeechTranscriber = SpeechTranscriber(self.SpeechEncoderBottom,
-                                                   config['SpeechTranscriber'])
+        self.SpeechEncoderBottom = SpeechEncoderBottom(
+            **config['SpeechEncoderBottom'])
+        self.SpeechTranscriber = SpeechTranscriber(
+            self.SpeechEncoderBottom, config['SpeechTranscriber'])
 
     def predict(self, audio, audio_len):
         return self.SpeechTranscriber.predict(audio, audio_len)
@@ -122,27 +126,28 @@ def experiment(net, data, run_config):
             # FIXME: avoid end of epoch with small batch
             for _j, item in enumerate(data.iter_train_batches(reshuffle=True)):
                 j = _j + 1
-                spk = item['speaker'][0] if len(set(item['speaker'])) == 1 else 'MIXED'
-                args = task.args(item)
-                args = [torch.autograd.Variable(torch.from_numpy(x)).cuda() for x in args]
+                for name, task in run_config['tasks']:
+                    spk = item['speaker'][0] if len(set(item['speaker'])) == 1 else 'MIXED'
+                    args = task.args(item)
+                    args = [torch.autograd.Variable(torch.from_numpy(x)).cuda() for x in args]
 
-                loss = task.cost(*args)
+                    loss = task.cost(*args)
 
-                task.optimizer.zero_grad()
-                loss.backward()
-                nn.utils.clip_grad_norm_(task.parameters(),
-                                         task.config['max_norm'])
-                task.optimizer.step()
-                cost += Counter({'cost': loss.data.item(), 'N': 1})
-                print(epoch, j, j*data.batch_size, spk, "train",
-                      "".join([str(cost['cost']/cost['N'])]))
+                    task.optimizer.zero_grad()
+                    loss.backward()
+                    nn.utils.clip_grad_norm_(task.parameters(),
+                                             task.config['max_norm'])
+                    task.optimizer.step()
+                    cost += Counter({'cost': loss.data.item(), 'N': 1})
+                    print(epoch, j, j*data.batch_size, spk, "train",
+                          "".join([str(cost['cost']/cost['N'])]))
 
-                if j % run_config['validate_period'] == 0:
-                    loss = valid_loss(net, task, data)
-                    print(epoch, j, 0, "VALID", "valid",
-                          "".join([str(np.mean(loss))]))
+                    if j % run_config['validate_period'] == 0:
+                        loss = valid_loss(net, task, data)
+                        print(epoch, j, 0, "VALID", "valid",
+                              "".join([str(np.mean(loss))]))
 
-                sys.stdout.flush()
+                    sys.stdout.flush()
             torch.save(net, model_fpath_tmpl.format(epoch))
 
             t2 = time.time()

@@ -13,7 +13,7 @@ import vg.scorer
 
 import time
 
-batch_size = 8 # 16
+batch_size = 16
 epochs = 25
 limit = None
 save_path = None

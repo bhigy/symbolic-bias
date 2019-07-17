@@ -338,7 +338,7 @@ def decode_sentences(task, audio, batch_size=128):
             vector_padder(batch, pad_end=True))).cuda()
         v_audio_len = torch.autograd.Variable(torch.from_numpy(
             numpy.array(audio_len))).cuda()
-        pred.append(task.predict(v_audio, v_audio_len))
+        pred.extend(task.predict(v_audio, v_audio_len))
     return pred
 
 
