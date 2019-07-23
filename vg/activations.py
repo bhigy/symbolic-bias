@@ -2,8 +2,9 @@ import numpy as np
 import torch
 import vg.mfcc as C
 
+
 def from_audio(model_path, paths, device='cpu'):
-    """Return per-layer activation states for audio files stored in paths, from model stored in model_path. 
+    """Return per-layer activation states for audio files stored in paths, from model stored in model_path.
     The output is a list of arrays of shape (time, layer, feature).
     """
     net = torch.load(model_path, device)
@@ -18,7 +19,7 @@ def get_state_stack(net, audios, batch_size=128):
     device = next(net.parameters()).device
     result = []
     lens = inout(np.array(list(map(len, audios))))
-    rs = (r for batch in util.grouper(audios, batch_size) 
+    rs = (r for batch in util.grouper(audios, batch_size)
                 for r in state_stack(net, torch.from_numpy(vector_padder(batch)).to(device)).cpu().numpy()
          )
     for (r,l) in zip(rs, lens):
@@ -26,8 +27,9 @@ def get_state_stack(net, audios, batch_size=128):
     return result
 
 
-def inout(L, pad=6, ksize=6, stride=2): # Default Flickr8k model parameters 
+def inout(L, pad=6, ksize=6, stride=2): # Default Flickr8k model parameters
     return np.floor( (L+2*pad-1*(ksize-1)-1)/stride + 1).astype(int)
+
 
 def index(t, stride=2, size=6):
     """Return index into the recurrent state of speech model given timestep

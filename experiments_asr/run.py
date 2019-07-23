@@ -13,10 +13,11 @@ import vg.scorer
 
 import time
 
-batch_size = 16
+batch_size = 8
 epochs = 25
 limit = None
 save_path = None
+validate_period=400
 
 # Parse command line parameters
 parser = argparse.ArgumentParser()
@@ -27,13 +28,14 @@ args = parser.parse_args()
 # Setup test mode
 if args.testmode:
     epochs = 1
-    limit = 100
+    limit = 50
     save_path = "tmp"
+    validate_period = (limit * 5) // (batch_size * 2)
 
 prov_flickr = dp_f.getDataProvider('flickr8k', root='..', audio_kind='mfcc')
 data_flickr = sd.SimpleData(prov_flickr, tokenize=sd.characters, min_df=1,
                             scale=False, batch_size=batch_size, shuffle=True,
-                            limit=limit)
+                            limit=limit, limit_val=limit)
 
 model_config = dict(
     SpeechEncoderBottom=dict(
@@ -44,11 +46,11 @@ model_config = dict(
         filter_size=64,
         stride=2),
     SpeechTranscriber=dict(
-        SpeechEncoderTop=dict(
-            size=1024,
-            size_input=1024,
-            depth=0,
-            size_attn=128),
+#        SpeechEncoderTop=dict(
+#            size=1024,
+#            size_input=1024,
+#            depth=0,
+#            size_attn=128),
         TextDecoder=dict(
             hidden_size=1024,
             output_size=data_flickr.mapper.ids.max,
@@ -72,9 +74,10 @@ net.mapper = None
 scorer = vg.scorer.ScorerASR(prov_flickr,
                              dict(split='val',
                                   tokenize=audio,
-                                  batch_size=batch_size))
+                                  batch_size=batch_size,
+                                  limit=limit))
 run_config = dict(epochs=epochs,
-                  validate_period=400,
+                  validate_period=validate_period,
                   tasks=[('SpeechTranscriber', net.SpeechTranscriber)],
                   Scorer=scorer,
                   save_path=save_path)

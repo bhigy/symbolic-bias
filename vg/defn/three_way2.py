@@ -9,7 +9,6 @@ import torch.optim as optim
 import torch.autograd
 import onion.loss as loss
 from onion import rhn, attention, conv
-from vg.simple_data import vector_padder
 from vg.scorer import Scorer, testing
 from vg.defn.encoders import TextEncoderTop, TextEncoderBottom, SpeechEncoderBottom, SpeechEncoderTop, ImageEncoder
 from collections import Counter

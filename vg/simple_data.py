@@ -82,6 +82,7 @@ class Batcher(object):
         autoassign(locals())
         self.BEG = self.mapper.BEG_ID
         self.END = self.mapper.END_ID
+        self.PAD = self.mapper.PAD_ID
         try:
             self.gap_low = self.erasure[0]
             self.gap_high = self.erasure[1]
@@ -92,9 +93,10 @@ class Batcher(object):
     def pad(self, xss):  # padding et beggining or end depending on self.pad_end
         max_len = max((len(xs) for xs in xss))
         def pad_one(xs):
+            padding = [self.PAD for _ in range(0, (max_len-len(xs)))]
             if self.pad_end:
-                return xs + [self.END for _ in range(0, (max_len-len(xs)))]
-            return [self.BEG for _ in range(0, (max_len-len(xs)))] + xs
+                return xs + padding
+            return padding + xs
         return [pad_one(xs) for xs in xss]
 
     def batch_inp(self, sents):
@@ -102,7 +104,8 @@ class Batcher(object):
         return mb[:,1:]
 
     def padder(self, sents):
-        return numpy.array(self.pad([[self.BEG]+sent+[self.END] for sent in sents]), dtype='int32')
+        sents = [[self.BEG] + sent + [self.END] for sent in sents]
+        return numpy.array(self.pad(sents), dtype='int32')
 
 
     def batch(self, gr):
@@ -209,9 +212,9 @@ class SimpleData(object):
     """Training / validation data prepared to feed to the model."""
     def __init__(self, provider, tokenize=words, min_df=10, scale=True,
                  scale_input=False, scale_utt=False, batch_size=64,
-                 shuffle=False, limit=None, curriculum=False, by_speaker=False,
-                 val_vocab=False, visual=True, erasure=5, midpoint=False,
-                 sigma=None, noise_tied=False, speakers=None):
+                 shuffle=False, limit=None, limit_val=None, curriculum=False,
+                 by_speaker=False, val_vocab=False, visual=True, erasure=5,
+                 midpoint=False, sigma=None, noise_tied=False, speakers=None):
         autoassign(locals())
         self.data = {}
         self.mapper = IdMapper(min_df=self.min_df)
@@ -225,7 +228,8 @@ class SimpleData(object):
             speakers=speakers)))
         parts_val = insideout(self.shuffled(arrange(
             provider.iterImages(split='val'),
-            tokenize=self.tokenize)))
+            tokenize=self.tokenize,
+            limit=limit_val)))
         # TRAINING
         if self.val_vocab:
             _ = list(self.mapper.fit_transform(parts['tokens_in'] + parts_val['tokens_in']))
@@ -317,7 +321,7 @@ def randomized(data):
 
 def arrange(data, tokenize=words, limit=None, speakers=None):
     for i, image in enumerate(data):
-        if limit is not None and i > limit:
+        if limit is not None and i >= limit:
             break
         for sent in image['sentences']:
             speaker = sent.get('speaker')
@@ -383,9 +387,11 @@ class IdMapper(object):
         self.BEG = '<BEG>'
         self.END = '<END>'
         self.UNK = '<UNK>'
+        self.PAD = '<PAD>'
         self.BEG_ID = self.ids.to_id(self.BEG)
         self.END_ID = self.ids.to_id(self.END)
         self.UNK_ID = self.ids.to_id(self.UNK)
+        self.PAD_ID = self.ids.to_id(self.PAD)
 
     def size(self):
         return len(self.ids.encoder)

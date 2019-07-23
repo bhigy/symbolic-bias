@@ -262,9 +262,12 @@ class ScorerASR:
         self.prov = prov
         self.config = config
         self.sentences = []
+        self.limit = config.get('limit', None)
         self.decode_sentences = config.get('decode_sentences',
                                            decode_sentences)
-        for image in prov.iterImages(split=config['split']):
+        for idx, image in enumerate(prov.iterImages(split=config['split'])):
+            if self.limit is not None and idx >= self.limit:
+                break
             for sent in image['sentences']:
                 self.sentences.append(sent)
         self.sentence_data = [config['tokenize'](s) for s in self.sentences]

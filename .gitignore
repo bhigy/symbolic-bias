@@ -2,5 +2,6 @@ archives/
 data/
 experiments/
 symbolic_bias.egg-info/
-log.txt
+*.txt
 model*.pkl
+*.csv

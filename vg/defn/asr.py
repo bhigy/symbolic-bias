@@ -28,16 +28,14 @@ class SpeechTranscriber(nn.Module):
         super(SpeechTranscriber, self).__init__()
         self.config = config
         self.SpeechEncoderBottom = speech_encoder
-        self.SpeechEncoderTop = SpeechEncoderTop(**config['SpeechEncoderTop'])
         self.TextDecoder = BahdanauAttnDecoderRNN(**config['TextDecoder'])
         self.optimizer = optim.Adam(self.parameters(), lr=config['lr'])
         self.mapper = config['mapper']
 
     # FIXME: memory issue when returning attention weights???
     def forward(self, speech, seq_len, target=None):
-        states, rep = self.SpeechEncoderTop.states(
-            self.SpeechEncoderBottom(speech, seq_len))
-        logits, attn_weights = self.TextDecoder.decode(states, target)
+        out = self.SpeechEncoderBottom(speech, seq_len)
+        logits, attn_weights = self.TextDecoder.decode(out, target)
         return logits
 
     def predict(self, audio, audio_len):
@@ -57,19 +55,19 @@ class SpeechTranscriber(nn.Module):
         return pred
 
     def cost(self, speech, target, seq_len):
-        target_logits = self.forward(speech, seq_len, target)
+        logits = self.forward(speech, seq_len, target)
 
         # Masking padding
         nb_tokens = self.mapper.ids.max
         # * flatten vectors
         target = target.view(-1)
-        target_logits = target_logits.view(-1, nb_tokens)
+        logits = logits.view(-1, nb_tokens)
         # * compute and apply mask
-        mask = (target != self.mapper.BEG_ID)
+        mask = (target != self.mapper.PAD_ID)
         target = target[mask]
-        target_logits = target_logits[mask, :]
+        logits = logits[mask, :]
 
-        cost = F.cross_entropy(target_logits, target)
+        cost = F.cross_entropy(logits, target)
         return cost
 
     def args(self, item):
@@ -109,16 +107,20 @@ def experiment(net, data, run_config):
     scorer = run_config['Scorer']
     last_epoch = 0
     result_fpath = "result.json"
+    wdump_fpath = "weights.csv"
     model_fpath_tmpl = "model.{}.pkl"
+    model_fpath = "model.pkl"
     if run_config['save_path'] is not None:
         result_fpath = os.path.join(run_config['save_path'], result_fpath)
+        wdump_fpath = os.path.join(run_config['save_path'], wdump_fpath)
         model_fpath_tmpl = os.path.join(run_config['save_path'],
                                         model_fpath_tmpl)
+        model_fpath = os.path.join(run_config['save_path'], model_fpath)
 
     for _, task in run_config['tasks']:
         task.optimizer.zero_grad()
 
-    with open(result_fpath, "w") as out:
+    with open(result_fpath, "w") as out, open(wdump_fpath, "w") as wdump:
         t = time.time()
         for epoch in range(last_epoch+1, run_config['epochs'] + 1):
             cost = Counter()
@@ -127,7 +129,8 @@ def experiment(net, data, run_config):
             for _j, item in enumerate(data.iter_train_batches(reshuffle=True)):
                 j = _j + 1
                 for name, task in run_config['tasks']:
-                    spk = item['speaker'][0] if len(set(item['speaker'])) == 1 else 'MIXED'
+                    spkr = item['speaker']
+                    spkr = spkr[0] if len(set(spkr)) == 1 else 'MIXED'
                     args = task.args(item)
                     args = [torch.autograd.Variable(torch.from_numpy(x)).cuda() for x in args]
 
@@ -139,13 +142,19 @@ def experiment(net, data, run_config):
                                              task.config['max_norm'])
                     task.optimizer.step()
                     cost += Counter({'cost': loss.data.item(), 'N': 1})
-                    print(epoch, j, j*data.batch_size, spk, "train",
+
+                    print(epoch, j, j*data.batch_size, spkr, "train",
                           "".join([str(cost['cost']/cost['N'])]))
 
                     if j % run_config['validate_period'] == 0:
                         loss = valid_loss(net, task, data)
                         print(epoch, j, 0, "VALID", "valid",
                               "".join([str(np.mean(loss))]))
+                        # Dump weights for debugging
+                        weights = [str(p.view(-1)[0].item()) for p in task.parameters()]
+                        wdump.write(",".join(weights))
+                        wdump.write("\n")
+                        wdump.flush()
 
                     sys.stdout.flush()
             torch.save(net, model_fpath_tmpl.format(epoch))
@@ -156,6 +165,7 @@ def experiment(net, data, run_config):
             with testing(net):
                 result = dict(epoch=epoch,
                               cer=scorer.cer(net))
+                print(epoch, j, 0, "CER", "valid", result)
                 out.write(json.dumps(result))
                 out.write("\n")
                 out.flush()
@@ -163,4 +173,4 @@ def experiment(net, data, run_config):
             print("Elapsed time: {:3f}".format(t2 - t))
             t = t2
 
-    torch.save(net, "model.pkl")
+    torch.save(net, model_fpath)

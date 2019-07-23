@@ -15,7 +15,7 @@ random.seed(seed)
 numpy.random.seed(seed)
 
 batch_size = 16
-epochs = 2
+epochs = 25
 limit = None
 save_path = None
 
@@ -61,7 +61,7 @@ model_config = dict(
         mapper=data_flickr.mapper))
 
 
-def audio(sent):
+def get_audio(sent):
     return sent['audio']
 
 
@@ -78,14 +78,13 @@ def load_sentences(split, limit):
 
 
 def transcribe(speech_transcriber, sentences):
-    sent_audio = [audio(s) for s in sentences]
+    sent_audio = [get_audio(s) for s in sentences]
     sent_len = [sd.shape[0] for sd in sent_audio]
     v_audio = torch.autograd.Variable(torch.from_numpy(
         sd.vector_padder(sent_audio, pad_end=True))).cuda()
     v_audio_len = torch.autograd.Variable(torch.from_numpy(
         numpy.array(sent_len))).cuda()
     logits = speech_transcriber.forward(v_audio, v_audio_len)
-    import pdb; pdb.set_trace()
     trn = speech_transcriber.logits2pred(logits)
     return trn
 
@@ -96,46 +95,48 @@ net.mapper = None
 
 scorer = vg.scorer.ScorerASR(prov_flickr,
                              dict(split='val',
-                                  tokenize=audio,
+                                  tokenize=get_audio,
                                   batch_size=batch_size))
 
 net.cuda()
-last_epoch = 1
+last_epoch = 0
 model_fpath_tmpl = "model.{}.pkl"
 if save_path is not None:
     model_fpath_tmpl = os.path.join(save_path, model_fpath_tmpl)
 
 for epoch in range(last_epoch + 1, epochs + 1):
-    print("EPOCH", epoch, "\n")
-    print("----------")
+    print("EPOCH", epoch)
     net = torch.load(model_fpath_tmpl.format(epoch))
 
     for sentences_tr in data_flickr.iter_train_batches():
         break
     audio = sentences_tr['audio']
     target = sentences_tr['target_t']
-    import pdb; pdb.set_trace()
     audio_len = [sd.shape[0] for sd in audio]
     v_audio = torch.from_numpy(numpy.array(audio)).cuda()
     v_target = torch.LongTensor(numpy.array(target)).cuda()
     v_audio_len = torch.from_numpy(numpy.array(audio_len)).cuda()
-    import pdb; pdb.set_trace()
     net.SpeechTranscriber.cost(v_audio, v_target, v_audio_len)
 
-    print("TRAIN")
+    print("TRAINING")
     sentences_tr = load_sentences('train', 1)
-    trn_tr = transcribe(net.SpeechTranscriber, sentences_tr)
+    hyp_tr = transcribe(net.SpeechTranscriber, sentences_tr)
     for i_sent, sent in enumerate(sentences_tr):
-        tgt = sent['raw']
-        print("tgt {}: {}".format(i_sent, tgt))
-        print("pred {}: {}\n".format(i_sent, trn_tr[i_sent]))
+        ref = sent['raw']
+        print("-" * 80)
+        print("ref{}: {}".format(i_sent, ref))
+        print("hyp{}: {}".format(i_sent, hyp_tr[i_sent]))
+    print("-" * 80)
+    print("")
 
     print("VALIDATION")
     sentences_dt = load_sentences('val', 1)
-    trn_dt = transcribe(net.SpeechTranscriber, sentences_dt)
+    hyp_dt = transcribe(net.SpeechTranscriber, sentences_dt)
     for i_sent, sent in enumerate(sentences_dt):
         tgt = sent['raw']
-        print("tgt {}: {}".format(i_sent, tgt))
-        print("pred {}: {}\n".format(i_sent, trn_dt[i_sent]))
+        print("-" * 80)
+        print("t{}: {}".format(i_sent, tgt))
+        print("p{}: {}".format(i_sent, hyp_dt[i_sent]))
+    print("-" * 80)
     print("")
     sys.stdout.flush()
