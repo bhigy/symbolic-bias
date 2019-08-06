@@ -163,9 +163,12 @@ def experiment(net, data, run_config):
             print("Elapsed time: {:3f}".format(t2 - t))
             t = t2
             with testing(net):
+                scorer.set_net(net)
                 result = dict(epoch=epoch,
-                              cer=scorer.cer(net))
-                print(epoch, j, 0, "CER", "valid", result)
+                              cer=scorer.cer(),
+                              wer=scorer.wer())
+                print(epoch, j, 0, "CER", "valid", result['cer'], "WER",
+                      "valid", result['wer']['WER'])
                 out.write(json.dumps(result))
                 out.write("\n")
                 out.flush()
