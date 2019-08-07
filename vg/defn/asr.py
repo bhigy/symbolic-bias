@@ -166,9 +166,9 @@ def experiment(net, data, run_config):
                 scorer.set_net(net)
                 result = dict(epoch=epoch,
                               cer=scorer.cer(),
-                              wer=scorer.wer())
+                              wer=scorer.wer()['WER'])
                 print(epoch, j, 0, "CER", "valid", result['cer'], "WER",
-                      "valid", result['wer']['WER'])
+                      "valid", result['wer'])
                 out.write(json.dumps(result))
                 out.write("\n")
                 out.flush()

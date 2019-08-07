@@ -34,7 +34,7 @@ if args.testmode:
 prov_flickr = dp_f.getDataProvider('flickr8k', root='..', audio_kind='mfcc')
 data_flickr = sd.SimpleData(prov_flickr, tokenize=sd.characters, min_df=1,
                             scale=False, batch_size=batch_size, shuffle=True,
-                            limit=limit)
+                            limit=limit, limit_val=limit)
 
 model_config = dict(
     SpeechEncoderBottom=dict(
@@ -96,7 +96,8 @@ net.mapper = None
 scorer = vg.scorer.ScorerASR(prov_flickr,
                              dict(split='val',
                                   tokenize=get_audio,
-                                  batch_size=batch_size))
+                                  batch_size=batch_size,
+                                  limit=limit))
 
 net.cuda()
 last_epoch = 0

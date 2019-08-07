@@ -311,7 +311,7 @@ class ScorerASR:
             delete += d
             insert += i
             substitute += s
-            nbchar += len(ref.split())
+            nbchar += len(ref)
         return (delete + insert + substitute) / nbchar
 
     def wer(self, net=None):
