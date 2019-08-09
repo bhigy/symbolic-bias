@@ -1,2 +1,2 @@
 clean:
-	rm -rf model*.pkl tmp
+	rm -rf */tmp */model.*.pkl

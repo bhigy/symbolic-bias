@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torch.autograd
 from vg.scorer import testing
-from vg.defn.encoders import SpeechEncoderBottom, SpeechEncoderTop
+from vg.defn.encoders import SpeechEncoderBottom
 from vg.defn.decoders import BahdanauAttnDecoderRNN
 from collections import Counter
 import sys
@@ -107,21 +107,26 @@ def experiment(net, data, run_config):
     scorer = run_config['Scorer']
     last_epoch = 0
     result_fpath = "result.json"
-    wdump_fpath = "weights.csv"
     model_fpath_tmpl = "model.{}.pkl"
     model_fpath = "model.pkl"
+    if run_config['debug']:
+        wdump_fpath = "weights.csv"
     if run_config['save_path'] is not None:
         result_fpath = os.path.join(run_config['save_path'], result_fpath)
-        wdump_fpath = os.path.join(run_config['save_path'], wdump_fpath)
         model_fpath_tmpl = os.path.join(run_config['save_path'],
                                         model_fpath_tmpl)
         model_fpath = os.path.join(run_config['save_path'], model_fpath)
+        if run_config['debug']:
+            wdump_fpath = os.path.join(run_config['save_path'], wdump_fpath)
+            wdump = open(wdump_fpath, "w")
 
     for _, task in run_config['tasks']:
         task.optimizer.zero_grad()
 
-    with open(result_fpath, "w") as out, open(wdump_fpath, "w") as wdump:
-        t = time.time()
+    with open(result_fpath, "w") as out:
+        if run_config['debug']:
+            t = time.time()
+        best_wer = None
         for epoch in range(last_epoch+1, run_config['epochs'] + 1):
             cost = Counter()
 
@@ -151,17 +156,19 @@ def experiment(net, data, run_config):
                         print(epoch, j, 0, "VALID", "valid",
                               "".join([str(np.mean(loss))]))
                         # Dump weights for debugging
-                        weights = [str(p.view(-1)[0].item()) for p in task.parameters()]
-                        wdump.write(",".join(weights))
-                        wdump.write("\n")
-                        wdump.flush()
+                        if run_config['debug']:
+                            weights = [str(p.view(-1)[0].item()) for p in task.parameters()]
+                            wdump.write(",".join(weights))
+                            wdump.write("\n")
+                            wdump.flush()
 
                     sys.stdout.flush()
             torch.save(net, model_fpath_tmpl.format(epoch))
 
-            t2 = time.time()
-            print("Elapsed time: {:3f}".format(t2 - t))
-            t = t2
+            if run_config['debug']:
+                t2 = time.time()
+                print("Elapsed time: {:3f}".format(t2 - t))
+                t = t2
             with testing(net):
                 scorer.set_net(net)
                 result = dict(epoch=epoch,
@@ -172,8 +179,14 @@ def experiment(net, data, run_config):
                 out.write(json.dumps(result))
                 out.write("\n")
                 out.flush()
-            t2 = time.time()
-            print("Elapsed time: {:3f}".format(t2 - t))
-            t = t2
+                # Save best model
+                if best_wer is None or result['wer'] < best_wer:
+                    torch.save(net, model_fpath)
+                    best_wer = result['wer']
+            if run_config['debug']:
+                t2 = time.time()
+                print("Elapsed time: {:3f}".format(t2 - t))
+                t = t2
 
-    torch.save(net, model_fpath)
+    if run_config['debug']:
+        wdump.close()

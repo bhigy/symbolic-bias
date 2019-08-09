@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 from onion import attention, conv
@@ -108,12 +109,23 @@ class GRUStack(nn.Module):
 
 
 class SpeechEncoderBottom(nn.Module):
-    def __init__(self, size_vocab, size, depth=1, filter_length=6,
-                 filter_size=64, stride=2, dropout_p=0.0):
+    def __init__(self, size_vocab, size, nb_conv_layer=1, depth=1,
+                 filter_length=6, filter_size=64, stride=2, dropout_p=0.0,
+                 relu=False, maxpool=False):
         super(SpeechEncoderBottom, self).__init__()
         util.autoassign(locals())
-        self.Conv = conv.Convolution1D(self.size_vocab, self.filter_length,
-                                       self.filter_size, stride=self.stride)
+        layers = []
+        size_in = self.size_vocab
+        for i_conv in range(0, self.nb_conv_layer):
+            layers.append(conv.Convolution1D(size_in,
+                                             self.filter_length,
+                                             self.filter_size,
+                                             stride=self.stride,
+                                             maxpool=self.maxpool))
+            if self.relu:
+                layers.append(nn.ReLU(True))
+            size_in = self.filter_size
+        self.Conv = nn.Sequential(*layers)
         if self.depth > 0:
             self.h0 = torch.autograd.Variable(torch.zeros(self.depth, 1,
                                                           self.size))
@@ -122,11 +134,10 @@ class SpeechEncoderBottom(nn.Module):
                               batch_first=True)
 
     def forward(self, x, x_len):
+        out = self.Conv(x)
         if self.depth > 0:
             h0 = self.h0.expand(self.depth, x.size(0), self.size).cuda()
-            out, last = self.RNN(self.Dropout(self.Conv(x)), h0)
-        else:
-            out = self.Conv(x)
+            out, last = self.RNN(self.Dropout(out), h0)
         return out
 
 
@@ -146,14 +157,6 @@ class SpeechEncoderBottomStack(nn.Module):
 
     def states(self, x):
         if self.depth > 0:
-#            print("x", x.size())
-#            x = self.Conv(x)
-#            print("conv", x.size())
-#            x = self.Dropout(x)
-#            print("dropout", x.size())
-#            x = self.RNN(x)
-#            print("rnn.forward", x.size())
-#            out = x
             out = self.RNN(self.Dropout(self.Conv(x)))
         else:
             out = self.Conv(x)

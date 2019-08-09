@@ -21,6 +21,8 @@ validate_period=400
 
 # Parse command line parameters
 parser = argparse.ArgumentParser()
+parser.add_argument('-d', help='Debug mode', dest='debugmode',
+                    action='store_true', default=False)
 parser.add_argument('-t', help='Test mode', dest='testmode',
                     action='store_true', default=False)
 args = parser.parse_args()
@@ -32,7 +34,7 @@ if args.testmode:
     save_path = "tmp"
     validate_period = (limit * 5) // (batch_size * 2)
 
-prov_flickr = dp_f.getDataProvider('flickr8k', root='..', audio_kind='mfcc')
+prov_flickr = dp_f.getDataProvider('flickr8k', root='../..', audio_kind='mfcc')
 data_flickr = sd.SimpleData(prov_flickr, tokenize=sd.characters, min_df=1,
                             scale=False, batch_size=batch_size, shuffle=True,
                             limit=limit, limit_val=limit)
@@ -42,9 +44,11 @@ model_config = dict(
         size=1024,
         depth=2,
         size_vocab=13,
+        nb_conv_layer=2,
         filter_length=6,
         filter_size=64,
-        stride=2),
+        stride=1,
+        maxpool=True),
     SpeechTranscriber=dict(
 #        SpeechEncoderTop=dict(
 #            size=1024,
@@ -80,7 +84,8 @@ run_config = dict(epochs=epochs,
                   validate_period=validate_period,
                   tasks=[('SpeechTranscriber', net.SpeechTranscriber)],
                   Scorer=scorer,
-                  save_path=save_path)
+                  save_path=save_path,
+                  debug=args.debugmode)
 D.experiment(net=net,
              data=data_flickr,
              run_config=run_config)
