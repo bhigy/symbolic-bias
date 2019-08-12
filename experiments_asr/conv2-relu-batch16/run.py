@@ -14,7 +14,7 @@ import vg.scorer
 
 import time
 
-batch_size = 8
+batch_size = 16
 epochs = 25
 limit = None
 save_path = None
@@ -47,10 +47,11 @@ model_config = dict(
         size=1024,
         depth=2,
         size_vocab=13,
-        nb_conv_layer=3,
+        nb_conv_layer=2,
         filter_length=6,
-        filter_size=[64, 64, 64],
-        stride=2),
+        filter_size=[64, 64],
+        stride=2,
+        relu=True),
     SpeechTranscriber=dict(
         TextDecoder=dict(
             hidden_size=1024,

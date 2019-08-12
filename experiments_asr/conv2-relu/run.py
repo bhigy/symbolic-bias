@@ -1,5 +1,6 @@
 import argparse
 import numpy
+import os
 import random
 seed = 103
 random.seed(seed)
@@ -31,8 +32,10 @@ args = parser.parse_args()
 if args.testmode:
     epochs = 1
     limit = 50
-    save_path = "tmp"
     validate_period = (limit * 5) // (batch_size * 2)
+    save_path = "tmp"
+    if not os.path.exists(save_path):
+        os.mkdir(save_path)
 
 prov_flickr = dp_f.getDataProvider('flickr8k', root='../..', audio_kind='mfcc')
 data_flickr = sd.SimpleData(prov_flickr, tokenize=sd.characters, min_df=1,
@@ -46,20 +49,14 @@ model_config = dict(
         size_vocab=13,
         nb_conv_layer=2,
         filter_length=6,
-        filter_size=64,
+        filter_size=[64, 64],
         stride=2,
         relu=True),
     SpeechTranscriber=dict(
-#        SpeechEncoderTop=dict(
-#            size=1024,
-#            size_input=1024,
-#            depth=0,
-#            size_attn=128),
         TextDecoder=dict(
             hidden_size=1024,
             output_size=data_flickr.mapper.ids.max,
             sos_id=data_flickr.mapper.BEG_ID,
-            #size_embed=64,
             depth=1,
             max_output_length=400), # max length for annotations is 199
         lr=0.0002,

@@ -128,7 +128,6 @@ def experiment(net, data, run_config):
             t = time.time()
         best_wer = None
         for epoch in range(last_epoch+1, run_config['epochs'] + 1):
-            cost = Counter()
 
             # FIXME: avoid end of epoch with small batch
             for _j, item in enumerate(data.iter_train_batches(reshuffle=True)):
@@ -146,15 +145,13 @@ def experiment(net, data, run_config):
                     nn.utils.clip_grad_norm_(task.parameters(),
                                              task.config['max_norm'])
                     task.optimizer.step()
-                    cost += Counter({'cost': loss.data.item(), 'N': 1})
 
                     print(epoch, j, j*data.batch_size, spkr, "train",
-                          "".join([str(cost['cost']/cost['N'])]))
+                          str(loss.data.item()))
 
                     if j % run_config['validate_period'] == 0:
                         loss = valid_loss(net, task, data)
-                        print(epoch, j, 0, "VALID", "valid",
-                              "".join([str(np.mean(loss))]))
+                        print(epoch, j, 0, "VALID", "valid", str(np.mean(loss)))
                         # Dump weights for debugging
                         if run_config['debug']:
                             weights = [str(p.view(-1)[0].item()) for p in task.parameters()]

@@ -110,7 +110,7 @@ class GRUStack(nn.Module):
 
 class SpeechEncoderBottom(nn.Module):
     def __init__(self, size_vocab, size, nb_conv_layer=1, depth=1,
-                 filter_length=6, filter_size=64, stride=2, dropout_p=0.0,
+                 filter_length=6, filter_size=[64], stride=2, dropout_p=0.0,
                  relu=False, maxpool=False):
         super(SpeechEncoderBottom, self).__init__()
         util.autoassign(locals())
@@ -119,19 +119,19 @@ class SpeechEncoderBottom(nn.Module):
         for i_conv in range(0, self.nb_conv_layer):
             layers.append(conv.Convolution1D(size_in,
                                              self.filter_length,
-                                             self.filter_size,
+                                             self.filter_size[i_conv],
                                              stride=self.stride,
                                              maxpool=self.maxpool))
             if self.relu:
                 layers.append(nn.ReLU(True))
-            size_in = self.filter_size
+            size_in = self.filter_size[i_conv]
         self.Conv = nn.Sequential(*layers)
         if self.depth > 0:
             self.h0 = torch.autograd.Variable(torch.zeros(self.depth, 1,
                                                           self.size))
             self.Dropout = nn.Dropout(p=self.dropout_p)
-            self.RNN = nn.GRU(self.filter_size, self.size, self.depth,
-                              batch_first=True)
+            self.RNN = nn.GRU(self.filter_size[self.nb_conv_layer - 1],
+                              self.size, self.depth, batch_first=True)
 
     def forward(self, x, x_len):
         out = self.Conv(x)

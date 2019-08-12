@@ -19,7 +19,9 @@ class Convolution1D(nn.Module):
 
     def forward(self, signal):
         # signal's shape is (B, T, C) where B=batch size, T=timesteps, C=channels
-        out = self.Maxpool(self.Conv(signal.permute(0, 2, 1)))
+        out = self.Conv(signal.permute(0, 2, 1))
+        if self.maxpool:
+            out = self.Maxpool(out)
         return out.permute(0, 2, 1)
 
 
