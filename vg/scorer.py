@@ -312,7 +312,10 @@ class ScorerASR:
             insert += i
             substitute += s
             nbchar += len(ref)
-        return (delete + insert + substitute) / nbchar
+        cer =  (delete + insert + substitute) / nbchar
+        correct = nbchar - substitute - delete
+        return {'CER':cer, 'Cor':correct, 'Sub':substitute, 'Ins':insert,
+                'Del':delete}
 
     def wer(self, net=None):
         if net is None:
