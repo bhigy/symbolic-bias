@@ -29,18 +29,26 @@ class SpeechTranscriber(nn.Module):
         self.config = config
         self.SpeechEncoderBottom = speech_encoder
         self.TextDecoder = BahdanauAttnDecoderRNN(**config['TextDecoder'])
-        self.optimizer = optim.Adam(self.parameters(), lr=config['lr'])
+        # TODO: choose optimizer
+        self.optimizer = optim.Adadelta(self.parameters(), rho=0.95, eps=1e-8)
+        #self.optimizer = optim.Adam(self.parameters(), lr=config['lr'])
         self.mapper = config['mapper']
 
-    # FIXME: memory issue when returning attention weights???
     def forward(self, speech, seq_len, target=None):
         out = self.SpeechEncoderBottom(speech, seq_len)
-        logits, attn_weights = self.TextDecoder.decode(out, target)
+        logits, _ = self.TextDecoder.decode(out, target)
         return logits
+
+    def get_attn_weights(self, speech, seq_len, target=None):
+        out = self.SpeechEncoderBottom(speech, seq_len)
+        _, attn_weights = self.TextDecoder.decode(out, target)
+        # TODO: check impact on memory
+        return attn_weights.detach().cpu()
 
     def predict(self, audio, audio_len):
         with testing(self):
-            logits = self.forward(audio, audio_len)
+            # TODO: check impact on memory
+            logits = self.forward(audio, audio_len).detach().cpu()
         return self.logits2pred(logits)
 
     def logits2pred(self, logits):
@@ -170,16 +178,17 @@ def experiment(net, data, run_config):
                 scorer.set_net(net)
                 result = dict(epoch=epoch,
                               cer=scorer.cer(),
-                              wer=scorer.wer()['WER'])
-                print(epoch, j, 0, "CER", "valid", result['cer'], "WER",
-                      "valid", result['wer'])
+                              wer=scorer.wer())
+                cer = result['cer']['CER']
+                wer = result['wer']['WER']
+                print(epoch, j, 0, "CER", "valid", cer, "WER", "valid", wer)
                 out.write(json.dumps(result))
                 out.write("\n")
                 out.flush()
                 # Save best model
-                if best_wer is None or result['wer'] < best_wer:
+                if best_wer is None or wer < best_wer:
                     torch.save(net, model_fpath)
-                    best_wer = result['wer']
+                    best_wer = wer
             if run_config['debug']:
                 t2 = time.time()
                 print("Elapsed time: {:3f}".format(t2 - t))

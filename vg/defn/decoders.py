@@ -127,7 +127,9 @@ class BahdanauAttn(nn.Module):
         self.use_cuda = use_cuda
 
         self.W_a = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.U_a = nn.Linear(hidden_size, hidden_size, bias=False)
+        # TODO: LSTM/GRU?
+        #self.U_a = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.U_a = nn.Linear(hidden_size * 2, hidden_size, bias=False)
         self.v_a = nn.Linear(hidden_size, 1)
 
     def forward(self, hidden, encoder_outputs):
@@ -172,14 +174,22 @@ class BahdanauAttnDecoderRNN(nn.Module):
         self.embedding = nn.Embedding(output_size, hidden_size)
         self.dropout = nn.Dropout(dropout_p)
         self.attn = BahdanauAttn(hidden_size, use_cuda=use_cuda)
-        self.gru = nn.GRU(hidden_size * 2, hidden_size, depth,
+        # TODO: LSTM/GRU?
+        #self.gru = nn.GRU(hidden_size * 2, hidden_size, depth,
+        #                  dropout=dropout_p, batch_first=True)
+        #self.out = nn.Linear(hidden_size * 2, output_size)
+        self.gru = nn.LSTM(hidden_size * 3, hidden_size, depth,
                           dropout=dropout_p, batch_first=True)
-        self.out = nn.Linear(hidden_size * 2, output_size)
+        self.out = nn.Linear(hidden_size * 3, output_size)
         self.sos = torch.LongTensor([[sos_id]])
         self.h0 = torch.zeros([1, 1, hidden_size])
+        # TODO: LSTM/GRU?
+        self.c0 = torch.zeros([1, 1, hidden_size])
         if use_cuda:
             self.sos = self.sos.cuda()
             self.h0 = self.h0.cuda()
+            # TODO: LSTM/GRU?
+            self.c0 = self.c0.cuda()
 
     def forward(self, input, last_hidden, encoder_outputs):
         # Note that we will only be running forward for a single decoder time
@@ -190,7 +200,7 @@ class BahdanauAttnDecoderRNN(nn.Module):
         word_embedded = self.dropout(word_embedded)
 
         # Calculate attention weights and apply to encoder outputs
-        attn_weights = self.attn(last_hidden, encoder_outputs)
+        attn_weights = self.attn(last_hidden[0], encoder_outputs)
         #context = attn_weights[:, :, None] * encoder_outputs
         context = attn_weights[:, :] * encoder_outputs
         context = context.sum(dim=1)
@@ -213,21 +223,24 @@ class BahdanauAttnDecoderRNN(nn.Module):
         batch_size = encoder_outputs.shape[0]
         input = self.sos.expand(batch_size, -1)
         hidden = self.h0.expand(-1, batch_size, -1).contiguous()
+        # TODO: LSTM/GRU?
+        cell = self.c0.expand(-1, batch_size, -1).contiguous()
         logits = torch.empty([batch_size, 0, self.output_size])
         input_size = encoder_outputs.shape[1]
-        #attn_weights = torch.empty([batch_size, input_size, 0])
+        attn_weights = torch.empty([batch_size, input_size, 0])
         if self.use_cuda:
             logits = logits.cuda()
-            #attn_weights = attn_weights.cuda()
+            attn_weights = attn_weights.cuda()
 
         if input_seq is not None:
             target_length = input_seq.shape[1]
         else:
             target_length = self.max_output_length
         for di in range(target_length):
-            output, hidden, att = self.forward(input, hidden, encoder_outputs)
+            # TODO: LSTM/GRU?
+            output, (hidden, cell), att = self.forward(input, (hidden, cell), encoder_outputs)
             logits = torch.cat((logits, output), 1)
-            #attn_weights = torch.cat((attn_weights, att[:, :, None]), 2)
+            attn_weights = torch.cat((attn_weights, att), 2)
             # Select next input
             use_teacher_forcing = False
             if input_seq is not None:
@@ -240,7 +253,7 @@ class BahdanauAttnDecoderRNN(nn.Module):
                 # Without teacher forcing: use network's own prediction as
                 # the next input
                 input = output.argmax(dim=2)
-        return logits, None #attn_weights
+        return logits, attn_weights
 
 
 def beam_search(net, audio, beg=0, end=1):
