@@ -127,9 +127,9 @@ class BahdanauAttn(nn.Module):
         self.use_cuda = use_cuda
 
         self.W_a = nn.Linear(hidden_size, hidden_size, bias=False)
-        # TODO: LSTM/GRU?
-        #self.U_a = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.U_a = nn.Linear(hidden_size * 2, hidden_size, bias=False)
+        # TODO: BiLSTM/LSTM/GRU?
+        self.U_a = nn.Linear(hidden_size, hidden_size, bias=False)
+        #self.U_a = nn.Linear(hidden_size * 2, hidden_size, bias=False)
         self.v_a = nn.Linear(hidden_size, 1)
 
     def forward(self, hidden, encoder_outputs):
@@ -174,13 +174,16 @@ class BahdanauAttnDecoderRNN(nn.Module):
         self.embedding = nn.Embedding(output_size, hidden_size)
         self.dropout = nn.Dropout(dropout_p)
         self.attn = BahdanauAttn(hidden_size, use_cuda=use_cuda)
-        # TODO: LSTM/GRU?
+        # TODO: BiLSTM/LSTM/GRU?
         #self.gru = nn.GRU(hidden_size * 2, hidden_size, depth,
         #                  dropout=dropout_p, batch_first=True)
         #self.out = nn.Linear(hidden_size * 2, output_size)
-        self.gru = nn.LSTM(hidden_size * 3, hidden_size, depth,
+        self.gru = nn.LSTM(hidden_size * 2, hidden_size, depth,
                           dropout=dropout_p, batch_first=True)
-        self.out = nn.Linear(hidden_size * 3, output_size)
+        self.out = nn.Linear(hidden_size * 2, output_size)
+        #self.gru = nn.LSTM(hidden_size * 3, hidden_size, depth,
+        #                  dropout=dropout_p, batch_first=True)
+        #self.out = nn.Linear(hidden_size * 3, output_size)
         self.sos = torch.LongTensor([[sos_id]])
         self.h0 = torch.zeros([1, 1, hidden_size])
         # TODO: LSTM/GRU?
@@ -201,8 +204,7 @@ class BahdanauAttnDecoderRNN(nn.Module):
 
         # Calculate attention weights and apply to encoder outputs
         attn_weights = self.attn(last_hidden[0], encoder_outputs)
-        #context = attn_weights[:, :, None] * encoder_outputs
-        context = attn_weights[:, :] * encoder_outputs
+        context = attn_weights * encoder_outputs
         context = context.sum(dim=1)
 
         # Combine embedded input word and attended context, run through RNN
@@ -230,7 +232,6 @@ class BahdanauAttnDecoderRNN(nn.Module):
         attn_weights = torch.empty([batch_size, input_size, 0])
         if self.use_cuda:
             logits = logits.cuda()
-            attn_weights = attn_weights.cuda()
 
         if input_seq is not None:
             target_length = input_seq.shape[1]
@@ -240,7 +241,7 @@ class BahdanauAttnDecoderRNN(nn.Module):
             # TODO: LSTM/GRU?
             output, (hidden, cell), att = self.forward(input, (hidden, cell), encoder_outputs)
             logits = torch.cat((logits, output), 1)
-            attn_weights = torch.cat((attn_weights, att), 2)
+            attn_weights = torch.cat((attn_weights, att.detach().cpu()), 2)
             # Select next input
             use_teacher_forcing = False
             if input_seq is not None:

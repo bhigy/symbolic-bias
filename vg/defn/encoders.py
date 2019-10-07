@@ -127,25 +127,27 @@ class SpeechEncoderBottom(nn.Module):
             size_in = self.filter_size[i_conv]
         self.Conv = nn.Sequential(*layers)
         if self.depth > 0:
-            self.h0 = torch.autograd.Variable(torch.zeros(self.depth * 2, 1,
+            # TODO: BiLSTM/LSTM/GRU?
+            self.h0 = torch.autograd.Variable(torch.zeros(self.depth, 1,
                                                           self.size))
-            # TODO: LSTM/GRU?
-            self.c0 = torch.autograd.Variable(torch.zeros(self.depth * 2, 1,
+            self.c0 = torch.autograd.Variable(torch.zeros(self.depth, 1,
                                                           self.size))
             self.Dropout = nn.Dropout(p=self.dropout_p)
-            # TODO: LSTM/GRU?
+            # TODO: BiLSTM/LSTM/GRU?
             #self.RNN = nn.GRU(self.filter_size[self.nb_conv_layer - 1],
             #                  self.size, self.depth, batch_first=True)
+            #self.RNN = nn.LSTM(self.filter_size[self.nb_conv_layer - 1],
+            #                   self.size, self.depth, batch_first=True,
+            #                   bidirectional=True)
             self.RNN = nn.LSTM(self.filter_size[self.nb_conv_layer - 1],
-                               self.size, self.depth, batch_first=True,
-                               bidirectional=True)
+                               self.size, self.depth, batch_first=True)
 
     def forward(self, x, x_len):
         out = self.Conv(x)
         if self.depth > 0:
-            h0 = self.h0.expand(self.depth * 2, x.size(0), self.size).cuda()
-            # TODO: choose type of units
-            c0 = self.h0.expand(self.depth * 2, x.size(0), self.size).cuda()
+            # TODO: BiLSTM/LSTM/GRU?
+            h0 = self.h0.expand(self.depth, x.size(0), self.size).cuda()
+            c0 = self.h0.expand(self.depth, x.size(0), self.size).cuda()
             out, last = self.RNN(self.Dropout(out), (h0, c0))
         return out
 

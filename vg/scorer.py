@@ -300,7 +300,8 @@ class ScorerASR:
             pred = self.pred
         else:
             with testing(net):
-                pred = self.decode_sentences(net, self.sentence_data)
+                pred = self.decode_sentences(net, self.sentence_data,
+                                             batch_size=self.batch_size)
         delete = 0
         insert = 0
         substitute = 0
@@ -322,7 +323,8 @@ class ScorerASR:
             pred = self.pred
         else:
             with testing(net):
-                pred = self.decode_sentences(net, self.sentence_data)
+                pred = self.decode_sentences(net, self.sentence_data,
+                                             batch_size=self.batch_size)
         delete = 0
         insert = 0
         substitute = 0
@@ -345,7 +347,8 @@ class ScorerASR:
             pred = self.pred
         else:
             with testing(net):
-                pred = self.decode_sentences(net, self.sentence_data)
+                pred = self.decode_sentences(net, self.sentence_data,
+                                             batch_size=self.batch_size)
         delete = 0
         insert = 0
         substitute = 0

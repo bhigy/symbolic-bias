@@ -14,7 +14,6 @@ from collections import Counter
 import sys
 import json
 
-
 def step(task, *args):
     loss = task.train_cost(*args)
     task.optimizer.zero_grad()
@@ -39,16 +38,17 @@ class SpeechTranscriber(nn.Module):
         logits, _ = self.TextDecoder.decode(out, target)
         return logits
 
+    # TODO: merge with forward now that weights are kept on cpu
     def get_attn_weights(self, speech, seq_len, target=None):
         out = self.SpeechEncoderBottom(speech, seq_len)
         _, attn_weights = self.TextDecoder.decode(out, target)
-        # TODO: check impact on memory
-        return attn_weights.detach().cpu()
+        return attn_weights
 
     def predict(self, audio, audio_len):
         with testing(self):
             # TODO: check impact on memory
-            logits = self.forward(audio, audio_len).detach().cpu()
+            #logits = self.forward(audio, audio_len).detach().cpu()
+            logits = self.forward(audio, audio_len)
         return self.logits2pred(logits)
 
     def logits2pred(self, logits):
@@ -136,15 +136,14 @@ def experiment(net, data, run_config):
             t = time.time()
         best_wer = None
         for epoch in range(last_epoch+1, run_config['epochs'] + 1):
-
-            # FIXME: avoid end of epoch with small batch
+            # FIXME: avoid end of epoch with small batch?
             for _j, item in enumerate(data.iter_train_batches(reshuffle=True)):
                 j = _j + 1
                 for name, task in run_config['tasks']:
                     spkr = item['speaker']
                     spkr = spkr[0] if len(set(spkr)) == 1 else 'MIXED'
                     args = task.args(item)
-                    args = [torch.autograd.Variable(torch.from_numpy(x)).cuda() for x in args]
+                    args = [torch.from_numpy(x).cuda() for x in args]
 
                     loss = task.cost(*args)
 
@@ -155,7 +154,7 @@ def experiment(net, data, run_config):
                     task.optimizer.step()
 
                     print(epoch, j, j*data.batch_size, spkr, "train",
-                          str(loss.data.item()))
+                          str(loss.item()))
 
                     if j % run_config['validate_period'] == 0:
                         loss = valid_loss(net, task, data)
@@ -189,6 +188,13 @@ def experiment(net, data, run_config):
                 if best_wer is None or wer < best_wer:
                     torch.save(net, model_fpath)
                     best_wer = wer
+                else:
+                    torch.save(net, model_fpath)
+                    for p in net.SpeechTranscriber.optimizer.param_groups:
+                        p["eps"] *= run_config['epsilon_decay']
+                        print('Epsilon decay - new value: ', p["eps"])
+                    #net.SpeechTranscriber.optimizer.eps *= run_config['epsilon_decay']
+                    #print('Epsilon: ', net.SpeechTranscriber.optimizer.eps)
             if run_config['debug']:
                 t2 = time.time()
                 print("Elapsed time: {:3f}".format(t2 - t))
