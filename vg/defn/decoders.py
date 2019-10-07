@@ -120,16 +120,17 @@ class BahdanauAttn(nn.Module):
     Attention mechanism following Bahdanau et al. (2015)
     [https://arxiv.org/abs/1409.0473]
     '''
-    def __init__(self, hidden_size, use_cuda=True):
+    def __init__(self, hidden_size, use_cuda=True, bidirectional_enc=False):
         super(BahdanauAttn, self).__init__()
 
         self.hidden_size = hidden_size
         self.use_cuda = use_cuda
 
         self.W_a = nn.Linear(hidden_size, hidden_size, bias=False)
-        # TODO: BiLSTM/LSTM/GRU?
-        self.U_a = nn.Linear(hidden_size, hidden_size, bias=False)
-        #self.U_a = nn.Linear(hidden_size * 2, hidden_size, bias=False)
+        if bidirectional_enc:
+            self.U_a = nn.Linear(hidden_size * 2, hidden_size, bias=False)
+        else:
+            self.U_a = nn.Linear(hidden_size, hidden_size, bias=False)
         self.v_a = nn.Linear(hidden_size, 1)
 
     def forward(self, hidden, encoder_outputs):
@@ -158,7 +159,7 @@ class BahdanauAttnDecoderRNN(nn.Module):
     '''
     def __init__(self, hidden_size, output_size, sos_id, max_output_length,
                  depth=1, dropout_p=0.0, teacher_forcing_ratio=1.0,
-                 use_cuda=True):
+                 use_cuda=True, bidirectional_enc=False):
         super(BahdanauAttnDecoderRNN, self).__init__()
 
         # Define parameters
@@ -169,21 +170,23 @@ class BahdanauAttnDecoderRNN(nn.Module):
         self.max_output_length = max_output_length
         self.teacher_forcing_ratio = teacher_forcing_ratio
         self.use_cuda = use_cuda
+        self.bidirectional_enc = bidirectional_enc
 
         # Define layers
         self.embedding = nn.Embedding(output_size, hidden_size)
         self.dropout = nn.Dropout(dropout_p)
-        self.attn = BahdanauAttn(hidden_size, use_cuda=use_cuda)
-        # TODO: BiLSTM/LSTM/GRU?
+        self.attn = BahdanauAttn(hidden_size, use_cuda=use_cuda,
+                                 bidirectional_enc=bidirectional_enc)
+        if bidirectional_enc:
+            mult = 3
+        else:
+            mult = 2
+        # TODO: LSTM/GRU?
         #self.gru = nn.GRU(hidden_size * 2, hidden_size, depth,
         #                  dropout=dropout_p, batch_first=True)
-        #self.out = nn.Linear(hidden_size * 2, output_size)
-        self.gru = nn.LSTM(hidden_size * 2, hidden_size, depth,
+        self.gru = nn.LSTM(hidden_size * mult, hidden_size, depth,
                           dropout=dropout_p, batch_first=True)
-        self.out = nn.Linear(hidden_size * 2, output_size)
-        #self.gru = nn.LSTM(hidden_size * 3, hidden_size, depth,
-        #                  dropout=dropout_p, batch_first=True)
-        #self.out = nn.Linear(hidden_size * 3, output_size)
+        self.out = nn.Linear(hidden_size * mult, output_size)
         self.sos = torch.LongTensor([[sos_id]])
         self.h0 = torch.zeros([1, 1, hidden_size])
         # TODO: LSTM/GRU?
