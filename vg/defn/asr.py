@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torch.autograd
 from vg.scorer import testing
-from vg.defn.encoders import SpeechEncoderBottom
+from vg.defn.encoders import SpeechEncoderBottom, SpeechEncoderBottomVGG
 from vg.defn.decoders import BahdanauAttnDecoderRNN
 from collections import Counter
 import sys
@@ -92,6 +92,18 @@ class Net(nn.Module):
         super(Net, self).__init__()
         self.SpeechEncoderBottom = SpeechEncoderBottom(
             **config['SpeechEncoderBottom'])
+        self.SpeechTranscriber = SpeechTranscriber(
+            self.SpeechEncoderBottom, config['SpeechTranscriber'])
+
+    def predict(self, audio, audio_len):
+        return self.SpeechTranscriber.predict(audio, audio_len)
+
+
+class NetVGG(nn.Module):
+    def __init__(self, config):
+        super(NetVGG, self).__init__()
+        self.SpeechEncoderBottom = SpeechEncoderBottomVGG(
+            **config['SpeechEncoderBottomVGG'])
         self.SpeechTranscriber = SpeechTranscriber(
             self.SpeechEncoderBottom, config['SpeechTranscriber'])
 
@@ -186,15 +198,14 @@ def experiment(net, data, run_config):
                 out.flush()
                 # Save best model
                 if best_wer is None or wer < best_wer:
-                    torch.save(net, model_fpath)
+                    torch.save(net.state_dict(), model_fpath)
                     best_wer = wer
                 else:
-                    torch.save(net, model_fpath)
-                    for p in net.SpeechTranscriber.optimizer.param_groups:
-                        p["eps"] *= run_config['epsilon_decay']
-                        print('Epsilon decay - new value: ', p["eps"])
-                    #net.SpeechTranscriber.optimizer.eps *= run_config['epsilon_decay']
-                    #print('Epsilon: ', net.SpeechTranscriber.optimizer.eps)
+                    net.load_state_dict(torch.load(model_fpath))
+                    if 'epsilon_decay' in run_config.keys():
+                        for p in net.SpeechTranscriber.optimizer.param_groups:
+                            p["eps"] *= run_config['epsilon_decay']
+                            print('Epsilon decay - new value: ', p["eps"])
             if run_config['debug']:
                 t2 = time.time()
                 print("Elapsed time: {:3f}".format(t2 - t))

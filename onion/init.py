@@ -40,4 +40,3 @@ def get_fans(shape):
 
 def uniform(shape, scale=0.05):
     return torch.from_numpy(np.random.uniform(low=-scale, high=scale, size=shape).astype('float32'))
-    

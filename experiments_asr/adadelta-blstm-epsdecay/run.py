@@ -76,14 +76,15 @@ net.mapper = None
 scorer = vg.scorer.ScorerASR(prov_flickr,
                              dict(split='val',
                                   tokenize=audio,
-                                  batch_size=batch_size,
+                                  batch_size=64,
                                   limit=limit))
 run_config = dict(epochs=epochs,
                   validate_period=validate_period,
                   tasks=[('SpeechTranscriber', net.SpeechTranscriber)],
                   Scorer=scorer,
                   save_path=save_path,
-                  debug=args.debugmode)
+                  debug=args.debugmode,
+                  epsilon_decay=0.01)
 D.experiment(net=net,
              data=data_flickr,
              run_config=run_config)
