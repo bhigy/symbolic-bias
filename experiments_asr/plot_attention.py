@@ -70,8 +70,7 @@ def get_attn_weights(speech_transcriber, sentences):
     v_audio = torch.from_numpy(
         sd.vector_padder(sent_audio, pad_end=True)).cuda()
     v_audio_len = torch.from_numpy(numpy.array(sent_len)).cuda()
-    attn_weights = speech_transcriber.get_attn_weights(v_audio, v_audio_len)
-    import pdb; pdb.set_trace()
+    _, attn_weights = speech_transcriber(v_audio, v_audio_len)
     return attn_weights.numpy()
 
 

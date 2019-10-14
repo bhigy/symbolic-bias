@@ -35,21 +35,13 @@ class SpeechTranscriber(nn.Module):
 
     def forward(self, speech, seq_len, target=None):
         out = self.SpeechEncoderBottom(speech, seq_len)
-        logits, _ = self.TextDecoder.decode(out, target)
-        return logits
-
-    # TODO: merge with forward now that weights are kept on cpu
-    def get_attn_weights(self, speech, seq_len, target=None):
-        out = self.SpeechEncoderBottom(speech, seq_len)
-        _, attn_weights = self.TextDecoder.decode(out, target)
-        return attn_weights
+        logits, attn_weights = self.TextDecoder.decode(out, target)
+        return logits, attn_weights
 
     def predict(self, audio, audio_len):
         with testing(self):
-            # TODO: check impact on memory
-            #logits = self.forward(audio, audio_len).detach().cpu()
-            logits = self.forward(audio, audio_len)
-        return self.logits2pred(logits)
+            logits, _ = self.forward(audio, audio_len)
+        return self.logits2pred(logits.detach().cpu())
 
     def logits2pred(self, logits):
         pred = []
@@ -63,7 +55,7 @@ class SpeechTranscriber(nn.Module):
         return pred
 
     def cost(self, speech, target, seq_len):
-        logits = self.forward(speech, seq_len, target)
+        logits, _ = self.forward(speech, seq_len, target)
 
         # Masking padding
         nb_tokens = self.mapper.ids.max
