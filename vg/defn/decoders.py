@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import onion.util as util
 import torch.nn.functional as F
+import numpy as np
 
 
 class BilinearAttention(nn.Module):
@@ -157,7 +158,7 @@ class BahdanauAttnDecoderRNN(nn.Module):
     [https://arxiv.org/abs/1409.0473]
     Borrowed from https://github.com/spro/practical-pytorch/blob/master/seq2seq-translation/seq2seq-translation.ipynb
     '''
-    def __init__(self, hidden_size, output_size, sos_id, max_output_length,
+    def __init__(self, hidden_size, output_size, mapper, max_output_length,
                  depth=1, dropout_p=0.0, teacher_forcing_ratio=1.0,
                  use_cuda=True, bidirectional_enc=False):
         super(BahdanauAttnDecoderRNN, self).__init__()
@@ -171,6 +172,7 @@ class BahdanauAttnDecoderRNN(nn.Module):
         self.teacher_forcing_ratio = teacher_forcing_ratio
         self.use_cuda = use_cuda
         self.bidirectional_enc = bidirectional_enc
+        self.mapper = mapper
 
         # Define layers
         self.embedding = nn.Embedding(output_size, hidden_size)
@@ -185,9 +187,9 @@ class BahdanauAttnDecoderRNN(nn.Module):
         #self.gru = nn.GRU(hidden_size * 2, hidden_size, depth,
         #                  dropout=dropout_p, batch_first=True)
         self.gru = nn.LSTM(hidden_size * mult, hidden_size, depth,
-                          dropout=dropout_p, batch_first=True)
+                           dropout=dropout_p, batch_first=True)
         self.out = nn.Linear(hidden_size * mult, output_size)
-        self.sos = torch.LongTensor([[sos_id]])
+        self.sos = torch.LongTensor([[mapper.BEG_ID]])
         self.h0 = torch.zeros([1, 1, hidden_size])
         # TODO: LSTM/GRU?
         self.c0 = torch.zeros([1, 1, hidden_size])
@@ -258,6 +260,85 @@ class BahdanauAttnDecoderRNN(nn.Module):
                 # the next input
                 input = output.argmax(dim=2)
         return logits, attn_weights
+
+    def beam_search(self, encoder_outputs, beam_size):
+        # Prepare variables
+        batch_size = encoder_outputs.shape[0]
+        preds = np.empty([batch_size, self.max_output_length])
+        # Loop over sequences
+        for i_seq, eo in enumerate(encoder_outputs):
+            eo = eo.unsqueeze(0)
+            inputs = self.sos
+            hiddens = self.h0
+            # TODO: LSTM/GRU?
+            cells = self.c0
+            hyps = np.empty([1, 0], dtype=int)
+            scores = np.ones(1)
+            ended_hyps = np.empty([0, 1], dtype=int)
+            ended_scores = np.empty([0])
+            ended_cell = torch.ones([1, 0, self.hidden_size])
+            ended_hidden = torch.ones([1, 0, self.hidden_size])
+            if self.use_cuda:
+                ended_cell = ended_cell.cuda()
+                ended_hidden = ended_hidden.cuda()
+            # Loop over time steps
+            for di in range(self.max_output_length):
+                # TODO: LSTM/GRU?
+                logits, (ht, ct), _ = self.forward(inputs, (hiddens, cells), eo)
+                new_hyps = ended_hyps
+                new_scores = ended_scores
+                new_cell = ended_cell
+                new_hidden = ended_hidden
+                # Loop over hypotheses
+                for idx_h, h in enumerate(hyps):
+                    best_scores, best_ids = torch.topk(logits[idx_h], beam_size)
+                    tmp_scores = scores[idx_h] + best_scores.squeeze().cpu()
+                    new_scores = np.hstack((new_scores, tmp_scores))
+                    tmp_hyps = np.hstack([
+                        np.repeat(h[np.newaxis, :], beam_size, axis=0),
+                        best_ids.view(beam_size, 1).cpu()])
+                    new_hyps = np.vstack((new_hyps, tmp_hyps))
+                    tmp_hidden = ht[:, idx_h].repeat([beam_size, 1]).unsqueeze(0)
+                    new_hidden = torch.cat((new_hidden, tmp_hidden), dim=1)
+                    tmp_cell = ct[:, idx_h].repeat([beam_size, 1]).unsqueeze(0)
+                    new_cell = torch.cat((new_cell, tmp_cell), dim=1)
+                    # Keep only <beam_size> best examples
+                    new_order = np.argsort(-new_scores)
+                    new_scores = new_scores[new_order][:beam_size]
+                    new_hyps = new_hyps[new_order][:beam_size]
+                    new_hidden = new_hidden[:, new_order][:, :beam_size]
+                    new_cell = new_cell[:, new_order][:, :beam_size]
+                # Filter ended sequences
+                ended = ((new_hyps[:, -1] == self.mapper.END_ID) |
+                         (new_hyps[:, -1] == self.mapper.PAD_ID)).nonzero()[0]
+                num_ended = len(ended)
+                if num_ended == beam_size:
+                    break
+                ended_hyps = np.hstack((
+                    new_hyps[ended],
+                    np.repeat([[self.mapper.PAD_ID]], num_ended, axis=0)))
+                ended_scores = new_scores[ended]
+                # cell and hidden vectors of ended sequences won't be used
+                # but we need to reserve the space for the indices to match
+                ended_cell = torch.ones([1, num_ended, self.hidden_size])
+                ended_hidden = torch.ones([1, num_ended, self.hidden_size])
+                mask = np.ones(beam_size, dtype=bool)
+                mask[ended] = 0
+                hyps = new_hyps[mask]
+                scores = new_scores[mask]
+                indices = mask.nonzero()[0]
+                hiddens = new_hidden[:, indices]
+                cells = new_cell[:, indices]
+                # Select next input
+                inputs = torch.unsqueeze(torch.from_numpy(hyps[:, -1]), 1)
+                if self.use_cuda:
+                    ended_cell = ended_cell.cuda()
+                    ended_hidden = ended_hidden.cuda()
+                    inputs = inputs.cuda()
+                # Duplicate encoder's output
+                eo = eo[0].unsqueeze(0).repeat([beam_size - num_ended, 1, 1])
+            preds[i_seq, :len(ended_hyps[0])] = new_hyps[0]
+        return preds
 
 
 def beam_search(net, audio, beg=0, end=1):

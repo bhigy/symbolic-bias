@@ -44,20 +44,23 @@ data_flickr = sd.SimpleData(prov_flickr, tokenize=sd.characters, min_df=1,
 
 model_config = dict(
     SpeechEncoderBottom=dict(
-        size=1024,
+        size=320,
         depth=2,
         size_vocab=13,
-        nb_conv_layer=2,
+        nb_conv_layer=1,
         filter_length=6,
-        filter_size=[64,128],
-        stride=2),
+        filter_size=[64],
+        stride=2,
+        bidirectional=True),
     SpeechTranscriber=dict(
         TextDecoder=dict(
-            hidden_size=1024,
+            hidden_size=320,
             output_size=data_flickr.mapper.ids.max,
-            sos_id=data_flickr.mapper.BEG_ID,
+            mapper=data_flickr.mapper,
             depth=1,
-            max_output_length=400), # max length for annotations is 199
+            max_output_length=400,
+            bidirectional_enc=True), # max length for annotations is 199
+        beam_size=10,
         lr=0.0002,
         max_norm=2.0,
         mapper=data_flickr.mapper))
@@ -71,17 +74,20 @@ net = D.Net(model_config)
 net.batcher = None
 net.mapper = None
 
-scorer = vg.scorer.ScorerASR(prov_flickr,
-                             dict(split='val',
-                                  tokenize=audio,
-                                  batch_size=batch_size,
-                                  limit=limit))
+scorer = vg.scorer.ScorerASR(
+    prov_flickr,
+    dict(split='val',
+         tokenize=audio,
+         batch_size=64,
+         limit=limit,
+         decode_sentences=vg.scorer.decode_sentences_beam))
 run_config = dict(epochs=epochs,
                   validate_period=validate_period,
                   tasks=[('SpeechTranscriber', net.SpeechTranscriber)],
                   Scorer=scorer,
                   save_path=save_path,
-                  debug=args.debugmode)
+                  debug=args.debugmode,
+                  epsilon_decay=0.01)
 D.experiment(net=net,
              data=data_flickr,
              run_config=run_config)

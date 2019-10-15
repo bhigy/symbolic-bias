@@ -43,6 +43,19 @@ class SpeechTranscriber(nn.Module):
             logits, _ = self.forward(audio, audio_len)
         return self.logits2pred(logits.detach().cpu())
 
+    def predict_beam(self, audio, audio_len):
+        with testing(self):
+            out = self.SpeechEncoderBottom(audio, audio_len)
+            preds = self.TextDecoder.beam_search(out, self.config['beam_size'])
+            pred_chars = []
+            for i_seq in range(preds.shape[0]):
+                seq = preds[i_seq]
+                i_eos = (seq == self.mapper.END_ID).nonzero()[0]
+                i_last = i_eos[0] if i_eos.shape[0] > 0 else seq.shape[0]
+                chars = [self.mapper.ids.from_id(id.item()) for id in seq[:i_last]]
+                pred_chars.append(''.join(chars))
+        return pred_chars
+
     def logits2pred(self, logits):
         pred = []
         ids = logits.argmax(dim=2)
@@ -90,6 +103,9 @@ class Net(nn.Module):
     def predict(self, audio, audio_len):
         return self.SpeechTranscriber.predict(audio, audio_len)
 
+    def predict_beam(self, audio, audio_len):
+        return self.SpeechTranscriber.predict_beam(audio, audio_len)
+
 
 class NetVGG(nn.Module):
     def __init__(self, config):
@@ -101,6 +117,9 @@ class NetVGG(nn.Module):
 
     def predict(self, audio, audio_len):
         return self.SpeechTranscriber.predict(audio, audio_len)
+
+    def predict_beam(self, audio, audio_len):
+        return self.SpeechTranscriber.predict_beam(audio, audio_len)
 
 
 def valid_loss(net, task, data):
