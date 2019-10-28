@@ -43,10 +43,10 @@ class SpeechTranscriber(nn.Module):
             logits, _ = self.forward(audio, audio_len)
         return self.logits2pred(logits.detach().cpu())
 
-    def predict_beam(self, audio, audio_len):
+    def predict_beam(self, audio, audio_len, beam_size):
         with testing(self):
             out = self.SpeechEncoderBottom(audio, audio_len)
-            preds = self.TextDecoder.beam_search(out, self.config['beam_size'])
+            preds = self.TextDecoder.beam_search(out, beam_size)
             pred_chars = []
             for i_seq in range(preds.shape[0]):
                 seq = preds[i_seq]
@@ -103,8 +103,8 @@ class Net(nn.Module):
     def predict(self, audio, audio_len):
         return self.SpeechTranscriber.predict(audio, audio_len)
 
-    def predict_beam(self, audio, audio_len):
-        return self.SpeechTranscriber.predict_beam(audio, audio_len)
+    def predict_beam(self, audio, audio_len, beam_size):
+        return self.SpeechTranscriber.predict_beam(audio, audio_len, beam_size)
 
 
 class NetVGG(nn.Module):
@@ -116,10 +116,10 @@ class NetVGG(nn.Module):
             self.SpeechEncoderBottom, config['SpeechTranscriber'])
 
     def predict(self, audio, audio_len):
-        return self.SpeechTranscriber.predict(audio, audio_len)
+        return self.SpeechTranscriber.predict(audio, audio_len, beam_size)
 
     def predict_beam(self, audio, audio_len):
-        return self.SpeechTranscriber.predict_beam(audio, audio_len)
+        return self.SpeechTranscriber.predict_beam(audio, audio_len, beam_size)
 
 
 def valid_loss(net, task, data):
@@ -190,7 +190,7 @@ def experiment(net, data, run_config):
                             wdump.flush()
 
                     sys.stdout.flush()
-            torch.save(net, model_fpath_tmpl.format(epoch))
+            #torch.save(net, model_fpath_tmpl.format(epoch))
 
             if run_config['debug']:
                 t2 = time.time()
@@ -224,3 +224,6 @@ def experiment(net, data, run_config):
 
     if run_config['debug']:
         wdump.close()
+
+    # Save full model for inference
+    torch.save(net, model_fpath)

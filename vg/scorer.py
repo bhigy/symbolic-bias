@@ -534,7 +534,7 @@ def decode_sentences(task, audio, batch_size=128):
     return pred
 
 
-def decode_sentences_beam(task, audio, batch_size=128):
+def decode_sentences_beam(task, audio, batch_size=128, beam_size=10):
     pred = []
     for batch in util.grouper(audio, batch_size):
         audio_len = [a.shape[0] for a in batch]
@@ -542,7 +542,7 @@ def decode_sentences_beam(task, audio, batch_size=128):
             vector_padder(batch, pad_end=True))).cuda()
         v_audio_len = torch.autograd.Variable(torch.from_numpy(
             numpy.array(audio_len))).cuda()
-        pred.extend(task.predict_beam(v_audio, v_audio_len))
+        pred.extend(task.predict_beam(v_audio, v_audio_len, beam_size))
     return pred
 
 

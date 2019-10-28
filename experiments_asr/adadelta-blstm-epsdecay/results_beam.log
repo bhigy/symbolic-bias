@@ -1,0 +1,7 @@
+nohup: ignoring input
+WARNING:root:No MFCC features, using dummy zeros for 2865703567_52de2444f2_0.wav
+/home/bjrhigy/.virtualenvs/symbolic-bias/lib/python3.7/site-packages/torch-1.0.0-py3.7-linux-x86_64.egg/torch/serialization.py:434: SourceChangeWarning: source code of class 'vg.defn.asr.Net' has changed. you can retrieve the original source code by accessing the object's source attribute or set `torch.nn.Module.dump_patches = True` and use the patch tool to revert the changes.
+  warnings.warn(msg, SourceChangeWarning)
+/home/bjrhigy/.virtualenvs/symbolic-bias/lib/python3.7/site-packages/torch-1.0.0-py3.7-linux-x86_64.egg/torch/serialization.py:434: SourceChangeWarning: source code of class 'vg.defn.decoders.BahdanauAttnDecoderRNN' has changed. you can retrieve the original source code by accessing the object's source attribute or set `torch.nn.Module.dump_patches = True` and use the patch tool to revert the changes.
+  warnings.warn(msg, SourceChangeWarning)
+{"model": "adadelta-blstm-epsdecay/model.pkl", "cer": {"CER": 0.12555986272829311, "Cor": 250601, "Sub": 18426, "Ins": 6752, "Del": 9836}, "wer": 0.20499621498864495}
