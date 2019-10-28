@@ -337,7 +337,7 @@ class BahdanauAttnDecoderRNN(nn.Module):
                     inputs = inputs.cuda()
                 # Duplicate encoder's output
                 eo = eo[0].unsqueeze(0).repeat([beam_size - num_ended, 1, 1])
-            preds[i_seq, :len(ended_hyps[0])] = new_hyps[0]
+            preds[i_seq, :len(new_hyps[0])] = new_hyps[0]
         return preds
 
 
