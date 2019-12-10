@@ -13,8 +13,8 @@ class Convolution1D(nn.Module):
         self.Conv = nn.Conv1d(self.size_in, self.size, self.length,
                               stride=self.stride, padding=padding, bias=False)
         # use Glorot uniform initialization
-        self.Conv.weight.data = init.glorot_uniform((self.size, self.size_in,
-                                                     self.length, 1)).squeeze()
+        #self.Conv.weight.data = init.glorot_uniform((self.size, self.size_in,
+        #                                             self.length, 1)).squeeze()
         #FIXME what is the correct padding???
         if self.maxpool:
             self.Maxpool = nn.MaxPool1d(2, 2, ceil_mode=True)

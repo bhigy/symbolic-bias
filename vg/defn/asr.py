@@ -38,6 +38,10 @@ class SpeechTranscriber(nn.Module):
         logits, attn_weights = self.TextDecoder.decode(out, target)
         return logits, attn_weights
 
+    def introspect(self, speech, seq_len):
+        activations = self.SpeechEncoderBottom.introspect(speech, seq_len)
+        return activations
+
     def predict(self, audio, audio_len):
         with testing(self):
             logits, _ = self.forward(audio, audio_len)
@@ -99,6 +103,9 @@ class Net(nn.Module):
             **config['SpeechEncoderBottom'])
         self.SpeechTranscriber = SpeechTranscriber(
             self.SpeechEncoderBottom, config['SpeechTranscriber'])
+
+    def introspect(self, audio, audio_len):
+        return self.SpeechTranscriber.introspect(audio, audio_len)
 
     def predict(self, audio, audio_len):
         return self.SpeechTranscriber.predict(audio, audio_len)

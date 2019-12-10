@@ -4,6 +4,7 @@ import torch.nn as nn
 from onion import attention, conv
 import onion.util as util
 import torch.nn.functional as F
+import vg.defn.introspect
 
 
 def l2normalize(x):
@@ -118,44 +119,61 @@ class SpeechEncoderBottom(nn.Module):
                                              self.filter_length,
                                              self.filter_size[i_conv],
                                              stride=self.stride,
-                                             maxpool=self.maxpool))
+                                             maxpool=self.maxpool,
+                                             padding=0))
             if self.relu:
                 layers.append(nn.ReLU(True))
             size_in = self.filter_size[i_conv]
         self.Conv = nn.Sequential(*layers)
         if self.depth > 0:
-            # TODO: LSTM/GRU?
-            if self.bidirectional:
-                self.h0 = torch.autograd.Variable(torch.zeros(self.depth * 2, 1,
-                                                              self.size))
-                self.c0 = torch.autograd.Variable(torch.zeros(self.depth * 2, 1,
-                                                              self.size))
-            else:
-                self.h0 = torch.autograd.Variable(torch.zeros(self.depth, 1,
-                                                              self.size))
-                self.c0 = torch.autograd.Variable(torch.zeros(self.depth, 1,
-                                                              self.size))
             self.Dropout = nn.Dropout(p=self.dropout_p)
-            # TODO: LSTM/GRU?
-            #self.RNN = nn.GRU(self.filter_size[self.nb_conv_layer - 1],
-            #                  self.size, self.depth, batch_first=True,
-            #                  bidirectional=self.bidirectional)
-            self.RNN = nn.LSTM(self.filter_size[self.nb_conv_layer - 1],
-                               self.size, self.depth, batch_first=True,
-                               bidirectional=self.bidirectional)
+            self.RNN = nn.GRU(self.filter_size[self.nb_conv_layer - 1],
+                              self.size, self.depth, batch_first=True,
+                              bidirectional=self.bidirectional)
 
     def forward(self, x, x_len):
         out = self.Conv(x)
         if self.depth > 0:
-            # TODO: LSTM/GRU?
-            if self.bidirectional:
-                h0 = self.h0.expand(self.depth * 2, x.size(0), self.size).cuda()
-                c0 = self.h0.expand(self.depth * 2, x.size(0), self.size).cuda()
-            else:
-                h0 = self.h0.expand(self.depth, x.size(0), self.size).cuda()
-                c0 = self.h0.expand(self.depth, x.size(0), self.size).cuda()
-            out, last = self.RNN(self.Dropout(out), (h0, c0))
+            out, _ = self.RNN(self.Dropout(out))
         return out
+
+    def introspect(self, input, l):
+        if not hasattr(self, 'IntrospectRNN'):
+            self.IntrospectRNN = vg.defn.introspect.IntrospectGRU(self.RNN)
+        result = {}
+
+        # Computing convolutional activations
+        i_module = 0
+        for i_conv in range(0, self.nb_conv_layer):
+            conv = self.Conv._modules[str(i_module)]
+            input = conv(input)
+            i_module += 1
+            if self.relu:
+                input = self.Conv._modules[str(i_module)](input)
+                i_module += 1
+            l = inout(conv.Conv, l, self.maxpool)
+            activations = [input[i, :l[i], :].cpu().numpy() for i in range(len(input))]
+            result['conv'.format(i_conv)] = activations
+
+        # Computing full stack of RNN
+        out = self.Dropout(input)
+        rnn = self.IntrospectRNN.introspect(out)
+        for layer in range(self.RNN.num_layers):
+            activations = [rnn[i, layer, :l[i], :].cpu().numpy() for i in range(len(rnn))]
+            result['rnn{}'.format(layer)] = activations
+
+        return result
+
+
+def inout(Conv, L, maxpool):
+    """Mapping from size of input to the size of the output of a 1D
+    convolutional layer.
+    https://pytorch.org/docs/stable/nn.html#torch.nn.Conv1d
+    """
+    pad    = 0
+    ksize  = Conv.kernel_size[0]
+    stride = Conv.stride[0] * 2 if maxpool else Conv.stride[0]
+    return ((L.float() + 2*pad - 1*(ksize-1) - 1) / stride + 1).floor().long()
 
 
 class SpeechEncoderBottomVGG(nn.Module):
@@ -193,17 +211,6 @@ class SpeechEncoderBottomVGG(nn.Module):
                                          maxpool=True))
         self.Conv = nn.Sequential(*layers)
         if self.depth > 0:
-            # TODO: LSTM/GRU?
-            if self.bidirectional:
-                self.h0 = torch.autograd.Variable(torch.zeros(self.depth * 2, 1,
-                                                              self.size))
-                self.c0 = torch.autograd.Variable(torch.zeros(self.depth * 2, 1,
-                                                              self.size))
-            else:
-                self.h0 = torch.autograd.Variable(torch.zeros(self.depth, 1,
-                                                              self.size))
-                self.c0 = torch.autograd.Variable(torch.zeros(self.depth, 1,
-                                                              self.size))
             self.Dropout = nn.Dropout(p=self.dropout_p)
             # TODO: LSTM/GRU?
             #self.RNN = nn.GRU(self.init_filter_size * 2,
@@ -218,14 +225,7 @@ class SpeechEncoderBottomVGG(nn.Module):
         out = out.contiguous()
         out = out.view(out.shape[0], out.shape[1], out.shape[2] * out.shape[3])
         if self.depth > 0:
-            # TODO: LSTM/GRU?
-            if self.bidirectional:
-                h0 = self.h0.expand(self.depth * 2, x.size(0), self.size).cuda()
-                c0 = self.h0.expand(self.depth * 2, x.size(0), self.size).cuda()
-            else:
-                h0 = self.h0.expand(self.depth, x.size(0), self.size).cuda()
-                c0 = self.h0.expand(self.depth, x.size(0), self.size).cuda()
-            out, last = self.RNN(self.Dropout(out), (h0, c0))
+            out, last = self.RNN(self.Dropout(out))
         return out
 
 

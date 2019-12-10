@@ -183,21 +183,14 @@ class BahdanauAttnDecoderRNN(nn.Module):
             mult = 3
         else:
             mult = 2
-        # TODO: LSTM/GRU?
-        #self.gru = nn.GRU(hidden_size * 2, hidden_size, depth,
-        #                  dropout=dropout_p, batch_first=True)
-        self.gru = nn.LSTM(hidden_size * mult, hidden_size, depth,
-                           dropout=dropout_p, batch_first=True)
+        self.gru = nn.GRU(hidden_size * mult, hidden_size, depth,
+                          dropout=dropout_p, batch_first=True)
         self.out = nn.Linear(hidden_size * mult, output_size)
         self.sos = torch.LongTensor([[mapper.BEG_ID]])
         self.h0 = torch.zeros([1, 1, hidden_size])
-        # TODO: LSTM/GRU?
-        self.c0 = torch.zeros([1, 1, hidden_size])
         if use_cuda:
             self.sos = self.sos.cuda()
             self.h0 = self.h0.cuda()
-            # TODO: LSTM/GRU?
-            self.c0 = self.c0.cuda()
 
     def forward(self, input, last_hidden, encoder_outputs):
         # Note that we will only be running forward for a single decoder time
@@ -208,7 +201,7 @@ class BahdanauAttnDecoderRNN(nn.Module):
         word_embedded = self.dropout(word_embedded)
 
         # Calculate attention weights and apply to encoder outputs
-        attn_weights = self.attn(last_hidden[0], encoder_outputs)
+        attn_weights = self.attn(last_hidden, encoder_outputs)
         context = attn_weights * encoder_outputs
         context = context.sum(dim=1)
 
@@ -230,8 +223,6 @@ class BahdanauAttnDecoderRNN(nn.Module):
         batch_size = encoder_outputs.shape[0]
         input = self.sos.expand(batch_size, -1)
         hidden = self.h0.expand(-1, batch_size, -1).contiguous()
-        # TODO: LSTM/GRU?
-        cell = self.c0.expand(-1, batch_size, -1).contiguous()
         logits = torch.empty([batch_size, 0, self.output_size])
         input_size = encoder_outputs.shape[1]
         attn_weights = torch.empty([batch_size, input_size, 0])
@@ -243,8 +234,7 @@ class BahdanauAttnDecoderRNN(nn.Module):
         else:
             target_length = self.max_output_length
         for di in range(target_length):
-            # TODO: LSTM/GRU?
-            output, (hidden, cell), att = self.forward(input, (hidden, cell), encoder_outputs)
+            output, hidden, att = self.forward(input, hidden, encoder_outputs)
             logits = torch.cat((logits, output), 1)
             attn_weights = torch.cat((attn_weights, att.detach().cpu()), 2)
             # Select next input
@@ -270,24 +260,18 @@ class BahdanauAttnDecoderRNN(nn.Module):
             eo = eo.unsqueeze(0)
             inputs = self.sos
             hiddens = self.h0
-            # TODO: LSTM/GRU?
-            cells = self.c0
             hyps = np.empty([1, 0], dtype=int)
             scores = np.ones(1)
             ended_hyps = np.empty([0, 1], dtype=int)
             ended_scores = np.empty([0])
-            ended_cell = torch.ones([1, 0, self.hidden_size])
             ended_hidden = torch.ones([1, 0, self.hidden_size])
             if self.use_cuda:
-                ended_cell = ended_cell.cuda()
                 ended_hidden = ended_hidden.cuda()
             # Loop over time steps
             for di in range(self.max_output_length):
-                # TODO: LSTM/GRU?
-                logits, (ht, ct), _ = self.forward(inputs, (hiddens, cells), eo)
+                logits, ht, _ = self.forward(inputs, hiddens, eo)
                 new_hyps = ended_hyps
                 new_scores = ended_scores
-                new_cell = ended_cell
                 new_hidden = ended_hidden
                 # Loop over hypotheses
                 for idx_h, h in enumerate(hyps):
@@ -300,14 +284,11 @@ class BahdanauAttnDecoderRNN(nn.Module):
                     new_hyps = np.vstack((new_hyps, tmp_hyps))
                     tmp_hidden = ht[:, idx_h].repeat([beam_size, 1]).unsqueeze(0)
                     new_hidden = torch.cat((new_hidden, tmp_hidden), dim=1)
-                    tmp_cell = ct[:, idx_h].repeat([beam_size, 1]).unsqueeze(0)
-                    new_cell = torch.cat((new_cell, tmp_cell), dim=1)
                     # Keep only <beam_size> best examples
                     new_order = np.argsort(-new_scores)
                     new_scores = new_scores[new_order][:beam_size]
                     new_hyps = new_hyps[new_order][:beam_size]
                     new_hidden = new_hidden[:, new_order][:, :beam_size]
-                    new_cell = new_cell[:, new_order][:, :beam_size]
                 # Filter ended sequences
                 ended = ((new_hyps[:, -1] == self.mapper.END_ID) |
                          (new_hyps[:, -1] == self.mapper.PAD_ID)).nonzero()[0]
@@ -318,9 +299,8 @@ class BahdanauAttnDecoderRNN(nn.Module):
                     new_hyps[ended],
                     np.repeat([[self.mapper.PAD_ID]], num_ended, axis=0)))
                 ended_scores = new_scores[ended]
-                # cell and hidden vectors of ended sequences won't be used
+                # hidden vectors of ended sequences won't be used
                 # but we need to reserve the space for the indices to match
-                ended_cell = torch.ones([1, num_ended, self.hidden_size])
                 ended_hidden = torch.ones([1, num_ended, self.hidden_size])
                 mask = np.ones(beam_size, dtype=bool)
                 mask[ended] = 0
@@ -328,30 +308,12 @@ class BahdanauAttnDecoderRNN(nn.Module):
                 scores = new_scores[mask]
                 indices = mask.nonzero()[0]
                 hiddens = new_hidden[:, indices]
-                cells = new_cell[:, indices]
                 # Select next input
                 inputs = torch.unsqueeze(torch.from_numpy(hyps[:, -1]), 1)
                 if self.use_cuda:
-                    ended_cell = ended_cell.cuda()
                     ended_hidden = ended_hidden.cuda()
                     inputs = inputs.cuda()
                 # Duplicate encoder's output
                 eo = eo[0].unsqueeze(0).repeat([beam_size - num_ended, 1, 1])
             preds[i_seq, :len(new_hyps[0])] = new_hyps[0]
         return preds
-
-
-def beam_search(net, audio, beg=0, end=1):
-    # Encode speech signal
-    states, rep = net.SpeechTranscriber.SpeechEncoderTop.states(
-        net.SpeechTranscriber.SpeechEncoderBottom(audio))
-    # feed states and rep, plus BEG token to decoder
-    # get top N choices for next letter
-    # for each N:
-    #   * feed states and rep, plus guess to decoder
-    #   * get top N choices for next letter
-    #   * extend beam
-    # prune prefixes
-    # go to next position
-
-    raise NotImplementedError

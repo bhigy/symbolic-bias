@@ -264,6 +264,7 @@ class ScorerASR:
         self.config = config
         self.sentences = []
         self.limit = config.get('limit', None)
+        self.batch_size = config.get('batch_size', None)
         self.decode_sentences = config.get('decode_sentences',
                                            decode_sentences)
         for idx, image in enumerate(prov.iterImages(split=config['split'])):
@@ -275,11 +276,13 @@ class ScorerASR:
 
         self.net = net
         if self.net is not None:
-            self.pred = self.decode_sentences(self.net, self.sentence_data)
+            self.pred = self.decode_sentences(self.net, self.sentence_data,
+                                              self.batch_size)
 
     def set_net(self, net):
         self.net = net
-        self.pred = self.decode_sentences(self.net, self.sentence_data)
+        self.pred = self.decode_sentences(self.net, self.sentence_data,
+                                          self.batch_size)
 
     @staticmethod
     def nbeditops(s1, s2):
@@ -294,6 +297,20 @@ class ScorerASR:
             elif op[0] == 'replace':
                 s += 1
         return d, i, s
+
+    def introspect(self, net):
+        with testing(net):
+            activations = introspect_sentences(net, self.sentence_data,
+                                                    batch_size=self.batch_size)
+        metadata = {'audio_id': [], 'text': [], 'audio': []}
+        for s in self.sentences:
+            metadata['audio_id'].append(s['filename'])
+            metadata['text'].append(s['raw'])
+            metadata['audio'].append(s['audio'].cpu().numpy())
+
+        for k in metadata.keys():
+            metadata[k] = numpy.array(metadata[k])
+        return metadata, activations
 
     def cer(self, net=None):
         if net is None:
@@ -532,6 +549,25 @@ def decode_sentences(task, audio, batch_size=128):
             numpy.array(audio_len))).cuda()
         pred.extend(task.predict(v_audio, v_audio_len))
     return pred
+
+
+def introspect_sentences(net, audio, batch_size=128):
+    activations = {}
+    for batch in util.grouper(audio, batch_size):
+        audio_len = [a.shape[0] for a in batch]
+        v_audio = torch.autograd.Variable(torch.from_numpy(
+            vector_padder(batch, pad_end=True))).cuda()
+        v_audio_len = torch.autograd.Variable(torch.from_numpy(
+            numpy.array(audio_len))).cuda()
+        result = net.introspect(v_audio, v_audio_len)
+        for layer in result:
+            if layer in activations:
+                activations[layer].extend(result[layer])
+            else:
+                activations[layer] = result[layer]
+    for layer in activations:
+        activations[layer] = numpy.array(activations[layer])
+    return activations
 
 
 def decode_sentences_beam(task, audio, batch_size=128, beam_size=10):

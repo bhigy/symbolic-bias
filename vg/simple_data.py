@@ -285,7 +285,8 @@ class SimpleData(object):
             if reshuffle:
                 data = randomized(self.data['train'])
             for bunch in util.grouper(data, self.batch_size*20):
-                bunch_sort = [bunch[i] for i in numpy.argsort([len(x['audio']) for x in bunch])[::-1]]
+                x_len = [len(x['audio']) for x in bunch]
+                bunch_sort = [bunch[i] for i in numpy.argsort(x_len)[::-1]]
                 for item in util.grouper(bunch_sort, self.batch_size):
                     yield self.batcher.batch(item)
 

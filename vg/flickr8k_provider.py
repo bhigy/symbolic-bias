@@ -16,7 +16,7 @@ class Provider:
     self.dataset_name = dataset
     self.audio_kind = audio_kind
     self.truncate = truncate
-    self.audiofile = "{}/data/flickr8k/flickr8k_mfcc.npy".format(self.root)
+    self.audiofile = '{}/data/flickr8k/flickr8k_mfcc_39_trunc.npy'.format(self.root)
     self.audio = np.load(self.audiofile, allow_pickle=True).item(0)
     self.img_feat =  scipy.io.loadmat(self.root + '/data/flickr8k/vgg_feats.mat')['feats'].T
     wav2spk = np.array(list(csv.reader(open(self.root + "/data/flickr8k/wav2spk.txt"), delimiter=' ')))
@@ -32,6 +32,7 @@ class Provider:
             image['feat'] = self.img_feat[image['imgid']]
             for (i, sentence) in enumerate(image['sentences']):
                 uttid = cap2wav["{}#{}".format(image['filename'], i)]
+                sentence['filename'] = uttid
 
                 if uttid not in self.audio:
                     logging.warning("No MFCC features, using dummy zeros for {}".format(uttid))
